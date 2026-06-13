@@ -1,1 +1,12 @@
 ﻿date,year,month,repo_id,report_url,list_location,detected_point,fish_raw,fish_normalized,size_cm,weight_kg,method,is_night_fishing,evidence_text,confidence
+2024-08-03,2024,8,iso_repo459,https://portside-t.com/iso/iso_repo459.htm,伊豆南地磯,カグラ根,シブダイ,シブダイ系,50,,夜釣り、磯釣り,true,40㎝前後が主体で最大50㎝はあっただろうか。ほとんどがシブダイであった。,medium
+2024-06-29,2024,6,iso_repo458,https://portside-t.com/iso/iso_repo458.htm,伊豆南地磯,伊豆南地磯,シブダイ,シブダイ系,35,,夜釣り、磯釣り、フカセ,true,今年の夏も来てくれるかと期待していたシブダイ(イッテンフエフキダイ)がこれ。 35㎝クラスで美味しくいただきました。臭みも全くなくとても美味な魚である。,low
+2024-10-07,2024,10,iso_repo460,https://portside-t.com/iso/iso_repo460.htm,伊豆南地磯,カグラ根,シブダイ,シブダイ系,,,夜釣り,true,ヘダイ、メイチダイ、シマアジ、シブダイ、,medium
+2015-07-29,2015,7,iso_repo299,https://portside-t.com/iso/iso_repo299.htm,南伊豆地磯・堤防,南伊豆地磯・堤防,フエダイ,シブダイ系,,,夜釣り、磯釣り,true,小メジナも来たが、また新藤さんにフエダイの30強が来た。,low
+2021-12-22,2021,12,iso_repo393,https://portside-t.com/iso/iso_repo393.htm,南伊豆地磯,南伊豆地磯,フエダイ,シブダイ系,,,磯釣り、フカセ,true,メジナ、イスズミ、フエダイ、カサゴ、,low
+2022-06-04,2022,6,iso_repo405,https://portside-t.com/iso/iso_repo405.htm,南伊豆地磯,南伊豆地磯,フエダイ,シブダイ系,,,夜釣り、磯釣り、フカセ,true,イサキ、フエフキダイ、フエダイ、ソイ、,low
+2023-06-21,2023,6,iso_repo434,https://portside-t.com/iso/iso_repo434.htm,伊豆南地磯,伊豆南地磯,フエダイ,シブダイ系,,,磯釣り,true,フエフキダイ、イサキ、フエダイ、,low
+2023-07-02,2023,7,iso_repo435,https://portside-t.com/iso/iso_repo435.htm,伊豆南地磯,伊豆南地磯,シブダイ(フエダイ),シブダイ系,,,磯釣り,true,メジナ、カマス、フエフキダイ、アイゴ、タカノハダイ、イサキ、フエダイ、ムラソイ、ショウサイフグ、クサフグ,low
+2023-07-15,2023,7,iso_repo436,https://portside-t.com/iso/iso_repo436.htm,伊豆南堤防,伊豆南堤防,シブダイ(フエダイ),シブダイ系,,,夜釣り、磯釣り,true,メジナ、シマアジ、シブダイ、ウツボ、ショウサイフグ、クサフグ,low
+2023-08-17,2023,8,iso_repo437,https://portside-t.com/iso/iso_repo437.htm,伊豆南堤防,伊豆南堤防,シブダイ,シブダイ系,,,夜釣り、磯釣り,true,メジナ、クロダイ、シブダイ、メイチダイ、イサキ、ウツボ、エイ、クサフグ,low
+2023-09-30,2023,9,iso_repo438,https://portside-t.com/iso/iso_repo438.htm,伊豆南地磯,伊豆南地磯,シブダイ,シブダイ系,,,磯釣り,true,ワカシ・シマアジ・シブダイ・アカメフグ・ベラ・ハタンポ,low
