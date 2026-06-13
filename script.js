@@ -47,6 +47,8 @@ const defaultConditions = {
   noLifeJacket: false,
 };
 
+const baseAreaOptions = ["田牛", "石廊崎", "中木吉田", "雲見松崎", "仁科田子"];
+
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
@@ -253,6 +255,24 @@ function createTimeline(baseScore, blocked) {
   }));
 }
 
+function createDateOptions() {
+  const formatter = new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", weekday: "short" });
+  return Array.from({ length: 8 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() + index);
+    const value = formatDateValue(date);
+    const label = index === 0 ? `今日 ${formatter.format(date)}` : `${index}日後 ${formatter.format(date)}`;
+    return { value, label };
+  });
+}
+
+function formatDateValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function gasGet(action, params = {}) {
   if (!GAS_API_URL) return null;
   const url = new URL(GAS_API_URL);
@@ -263,7 +283,7 @@ async function gasGet(action, params = {}) {
   const response = await fetch(url.toString());
   const payload = await response.json();
   if (!payload.ok) throw new Error(payload.error || "GAS API error");
-  return payload.data;
+  return payload.data ?? payload;
 }
 
 async function gasPost(body) {
@@ -275,12 +295,12 @@ async function gasPost(body) {
   });
   const payload = await response.json();
   if (!payload.ok) throw new Error(payload.error || "GAS API error");
-  return payload.data;
+  return payload.data ?? payload;
 }
 
 const app = Vue.createApp({
   data() {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = formatDateValue(new Date());
     return {
       nav: [
         { id: "spots", label: "一覧" },
@@ -292,6 +312,12 @@ const app = Vue.createApp({
       view: "spots",
       gasApiUrl: GAS_API_URL,
       apiStatus: GAS_API_URL ? "GAS APIへ接続準備中" : "ローカルサンプルDBで表示中",
+      forecastStatus: "手入力条件で計算中",
+      autoLoading: false,
+      selectedDate: today,
+      dateOptions: createDateOptions(),
+      baseArea: "田牛",
+      baseAreas: baseAreaOptions,
       spotSort: "shibudai_score",
       spots: sampleSpots,
       selectedSpotId: sampleSpots[0].spot_id,
@@ -357,6 +383,33 @@ const app = Vue.createApp({
         this.apiStatus = "GAS APIからスプレッドシートDBを読み込み済み";
       } catch (error) {
         this.apiStatus = `GAS API読み込み失敗。ローカルサンプルで表示中: ${error.message}`;
+      }
+    },
+    async fetchAutoConditions() {
+      const manualSafety = {
+        soloNight: this.conditions.soloNight,
+        noLifeJacket: this.conditions.noLifeJacket,
+      };
+      if (!GAS_API_URL) {
+        this.forecastStatus = "GAS API URL未設定。手入力で調整してください。";
+        return;
+      }
+      this.autoLoading = true;
+      this.forecastStatus = `${this.baseArea} / ${this.selectedDate} の海況を取得中`;
+      try {
+        const forecast = await gasGet("forecast", { date: this.selectedDate, area: this.baseArea });
+        const nextConditions = forecast.conditions || {};
+        this.conditions = {
+          ...this.conditions,
+          ...nextConditions,
+          ...manualSafety,
+        };
+        this.forecastStatus = `${forecast.area || this.baseArea} / ${forecast.date || this.selectedDate} の海況を反映しました。潮位系は参考値です。`;
+        this.spotSort = "score";
+      } catch (error) {
+        this.forecastStatus = `海況取得に失敗しました: ${error.message}`;
+      } finally {
+        this.autoLoading = false;
       }
     },
     scoreSpot(spot) {

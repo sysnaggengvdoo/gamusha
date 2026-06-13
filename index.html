@@ -27,6 +27,29 @@
             <button class="ghost" type="button" @click="resetConditions">初期化</button>
           </div>
 
+          <div class="field-grid">
+            <label>
+              <span>対象日</span>
+              <select v-model="selectedDate">
+                <option v-for="option in dateOptions" :key="option.value" :value="option.value">
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+
+            <label>
+              <span>基準エリア</span>
+              <select v-model="baseArea">
+                <option v-for="area in baseAreas" :key="area" :value="area">{{ area }}</option>
+              </select>
+            </label>
+          </div>
+
+          <button class="primary fetch-button" type="button" :disabled="autoLoading" @click="fetchAutoConditions">
+            {{ autoLoading ? '取得中...' : '海況を自動取得' }}
+          </button>
+          <p class="api-status">{{ forecastStatus }}</p>
+
           <label>
             <span>水温</span>
             <input v-model.number="conditions.waterTemp" type="number" step="0.1" />
