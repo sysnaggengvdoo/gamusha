@@ -168,12 +168,16 @@ CSV_SCHEMAS = {
 }
 
 DEFAULT_POINT_ALIASES = [
-    {"spot_id": "62_takanba", "app_spot_name": "高ん場", "alias": "高ん場", "confidence": "high", "memo": "アプリ釣り場名と同一"},
-    {"spot_id": "74_motone", "app_spot_name": "元根", "alias": "元根", "confidence": "high", "memo": "アプリ釣り場名と同一"},
-    {"spot_id": "75_kagurane", "app_spot_name": "カグラ根", "alias": "カグラ根", "confidence": "high", "memo": "アプリ釣り場名と同一"},
-    {"spot_id": "75_kagurane", "app_spot_name": "カグラ根", "alias": "神楽根", "confidence": "high", "memo": "本文表記ゆれ"},
-    {"spot_id": "76_ongoku", "app_spot_name": "遠国", "alias": "遠国", "confidence": "high", "memo": "アプリ釣り場名と同一"},
-    {"spot_id": "76_ongoku", "app_spot_name": "遠国", "alias": "田牛周辺", "confidence": "low", "memo": "広域表記のため断定しない"},
+    {"spot_id": "74_motone", "app_spot_name": "元根", "alias": "元根", "confidence": "high", "memo": "名称一致"},
+    {"spot_id": "75_kagurane", "app_spot_name": "カグラ根", "alias": "カグラ根", "confidence": "high", "memo": "名称一致"},
+    {"spot_id": "75_kagurane", "app_spot_name": "カグラ根", "alias": "神楽根", "confidence": "high", "memo": "表記ゆれ"},
+    {"spot_id": "76_ongoku", "app_spot_name": "遠国", "alias": "遠国", "confidence": "high", "memo": "名称一致"},
+    {"spot_id": "77_aragami_taraisaki", "app_spot_name": "荒神 タライ岬", "alias": "荒神", "confidence": "high", "memo": "略称"},
+    {"spot_id": "77_aragami_taraisaki", "app_spot_name": "荒神 タライ岬", "alias": "タライ岬", "confidence": "high", "memo": "別名表記"},
+    {"spot_id": "67_akane", "app_spot_name": "赤根", "alias": "赤根", "confidence": "medium", "memo": "名称一致だがエリア確認必要"},
+    {"spot_id": "69_akasaki", "app_spot_name": "赤崎", "alias": "赤崎", "confidence": "medium", "memo": "名称一致"},
+    {"spot_id": "96_kurosaki", "app_spot_name": "黒崎", "alias": "黒崎", "confidence": "medium", "memo": "名称一致だが黒崎の段との混同注意"},
+    {"spot_id": "96_kurosaki", "app_spot_name": "黒崎", "alias": "黒崎の段", "confidence": "medium", "memo": "名称が似るため要確認"},
 ]
 
 

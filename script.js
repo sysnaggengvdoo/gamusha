@@ -549,6 +549,10 @@ function normalizeCatchRecord(record = {}) {
     candidate_spot_id: String(record.candidate_spot_id || ""),
     app_spot_name: String(record.app_spot_name || ""),
     alias_confidence: String(record.alias_confidence || ""),
+    match_scope: String(record.match_scope || ""),
+    match_label: String(record.match_label || ""),
+    nearby_reason: String(record.nearby_reason || ""),
+    is_nearby: record.is_nearby === true || record.is_nearby === "true" || record.match_scope === "nearby",
   };
 }
 
@@ -570,7 +574,7 @@ function isShibudaiFishName(value) {
 }
 
 function isShibudaiRecord(record) {
-  return isShibudaiFishName(record.fish_normalized) || isShibudaiFishName(record.fish_raw) || isShibudaiFishName(record.evidence_text);
+  return isShibudaiFishName(record.fish_normalized) || isShibudaiFishName(record.fish_raw);
 }
 
 function recordMonth(record) {
@@ -583,7 +587,10 @@ function compactText(value) {
 
 function recordMatchesSpot(record, spot) {
   if (!record || !spot) return false;
-  const ids = [record.spot_id, record.candidate_spot_id].filter(Boolean);
+  if (record.is_nearby || record.match_scope === "nearby") return false;
+  const confidence = String(record.confidence || record.alias_confidence || "").toLowerCase();
+  if (confidence === "low" && !record.spot_id) return false;
+  const ids = [record.spot_id].filter(Boolean);
   if (ids.includes(spot.spot_id)) return true;
   const spotName = compactText(spot.name);
   const points = [record.detected_point, record.app_spot_name, record.list_location].map(compactText).filter(Boolean);
@@ -592,6 +599,31 @@ function recordMatchesSpot(record, spot) {
 
 function recordsForSpot(records, spot) {
   return (records || []).filter((record) => recordMatchesSpot(record, spot));
+}
+
+function nearbyRecordsForSpot(records, spot, spots) {
+  const seen = new Set();
+  return (records || [])
+    .filter((record) => !recordMatchesSpot(record, spot))
+    .filter((record) => isShibudaiRecord(record))
+    .filter((record) => {
+      const recordSpot = spotForCatchRecord(record, spots);
+      return sameBaseArea(recordSpot, spot);
+    })
+    .map((record) => ({
+      ...record,
+      is_nearby: true,
+      match_scope: "nearby",
+      match_label: record.match_label || "周辺候補",
+      nearby_reason: record.nearby_reason || "同じbase_area内のシブダイ候補",
+    }))
+    .filter((record) => {
+      const key = [record.repo_id, record.fish_raw, record.report_url].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 }
 
 function incrementCount(map, key, amount = 1) {
@@ -607,17 +639,14 @@ function sortedCountEntries(map, limit = 10) {
 }
 
 function uniqueReportRecords(records, limit = 12) {
-  const seen = new Set();
-  return (records || [])
-    .filter((record) => record.report_url)
-    .filter((record) => {
-      const key = record.report_url;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
-    .slice(0, limit);
+  const byUrl = new Map();
+  (records || []).filter((record) => record.report_url).forEach((record) => {
+    const current = byUrl.get(record.report_url);
+    if (!current || (isShibudaiRecord(record) && !isShibudaiRecord(current))) {
+      byUrl.set(record.report_url, record);
+    }
+  });
+  return [...byUrl.values()].sort((a, b) => String(b.date || "").localeCompare(String(a.date || ""))).slice(0, limit);
 }
 
 function summarizeCatchRecords(records) {
@@ -682,10 +711,11 @@ function buildCatchHistoryBoost(spot, selectedDate, allRecords, shibudaiRecords,
   const shibudaiForSpot = (shibudaiRecords || []).filter((record) => recordMatchesSpot(record, spot));
   const sameMonth = shibudaiForSpot.some((record) => recordMonth(record) === month);
   const otherMonth = shibudaiForSpot.length > 0 && !sameMonth;
-  const sameAreaMonth = (shibudaiRecords || []).some((record) => {
+  const sameAreaMonthRecords = (shibudaiRecords || []).filter((record) => {
     if (recordMonth(record) !== month || recordMatchesSpot(record, spot)) return false;
     return sameBaseArea(spotForCatchRecord(record, spots), spot);
   });
+  const sameAreaMonth = sameAreaMonthRecords.length > 0;
   const companionHits = recordsForSpot(allRecords, spot).filter((record) => !isShibudaiRecord(record) && companionFishPattern.test(record.fish_normalized || record.fish_raw));
   const confidenceRecords = [...shibudaiForSpot, ...companionHits];
   const lowOnly = confidenceRecords.length > 0 && confidenceRecords.every((record) => String(record.confidence || record.alias_confidence || "").toLowerCase() === "low");
@@ -700,7 +730,8 @@ function buildCatchHistoryBoost(spot, selectedDate, allRecords, shibudaiRecords,
     reasons.push("同じ磯にシブダイ系実績");
   }
   if (sameAreaMonth) {
-    bonus += 4;
+    const sameAreaLowOnly = sameAreaMonthRecords.every((record) => String(record.confidence || record.alias_confidence || "").toLowerCase() === "low" || record.is_nearby);
+    bonus += sameAreaLowOnly ? 2 : 4;
     reasons.push("同じエリア・同じ月にシブダイ系実績");
   }
   if (companionHits.length > 0) {
@@ -819,8 +850,15 @@ const app = Vue.createApp({
     selectedCatchRecords() {
       return this.catchRecordsBySpot[this.selectedSpotId]?.records || recordsForSpot(this.catchRecords, this.selectedSpot);
     },
+    selectedNearbyCatchRecords() {
+      const cached = this.catchRecordsBySpot[this.selectedSpotId]?.nearby_records || [];
+      return cached.length > 0 ? cached : nearbyRecordsForSpot(this.shibudaiHistory, this.selectedSpot, this.spots);
+    },
     selectedCatchSummary() {
       return summarizeCatchRecords(this.selectedCatchRecords);
+    },
+    selectedNearbyCatchSummary() {
+      return summarizeCatchRecords(this.selectedNearbyCatchRecords);
     },
     monthlyShibudaiStats() {
       return buildMonthlyShibudaiStats(this.shibudaiHistory, this.catchSummary);
@@ -835,7 +873,9 @@ const app = Vue.createApp({
       return buildMethodStats(this.catchRecords);
     },
     relatedReportRecords() {
-      return uniqueReportRecords(this.shibudaiHistory.length ? this.shibudaiHistory : this.catchRecords, 18);
+      return [...(this.shibudaiHistory.length ? this.shibudaiHistory : this.catchRecords)]
+        .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+        .slice(0, 24);
     },
     timeline() {
       return createTimeline(this.selectedResult.score, this.selectedResult.judge === "出撃不可");
@@ -889,6 +929,7 @@ const app = Vue.createApp({
           [spotId]: {
             loaded: true,
             records: (payload?.records || []).map(normalizeCatchRecord),
+            nearby_records: (payload?.nearby_records || []).map(normalizeCatchRecord),
             error: "",
           },
         };
@@ -896,7 +937,12 @@ const app = Vue.createApp({
         const fallbackSpot = this.spots.find((spot) => spot.spot_id === spotId) || this.selectedSpot;
         this.catchRecordsBySpot = {
           ...this.catchRecordsBySpot,
-          [spotId]: { loaded: true, records: recordsForSpot(this.catchRecords, fallbackSpot), error: error.message },
+          [spotId]: {
+            loaded: true,
+            records: recordsForSpot(this.catchRecords, fallbackSpot),
+            nearby_records: nearbyRecordsForSpot(this.shibudaiHistory, fallbackSpot, this.spots),
+            error: error.message,
+          },
         };
       }
     },

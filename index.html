@@ -312,6 +312,26 @@
                 </div>
               </div>
               <p v-else class="muted">この釣り場に紐づく釣果履歴はまだありません。CSVをスプレッドシートへ取り込むと表示されます。</p>
+
+              <div v-if="selectedNearbyCatchRecords.length > 0" class="catch-detail nearby-catch">
+                <div>
+                  <h3>周辺実績</h3>
+                  <p class="muted">同じbase_area内、または低信頼aliasで拾った候補です。特定磯への断定ではありません。</p>
+                  <div class="mini-stats">
+                    <span v-for="item in selectedNearbyCatchSummary.shibudaiMonths" :key="item.label">{{ item.label }} {{ item.count }}件</span>
+                  </div>
+                </div>
+                <div>
+                  <h3>周辺レポート</h3>
+                  <div class="report-list compact">
+                    <a v-for="record in selectedNearbyCatchSummary.reports" :key="record.report_url || record.date + record.fish_raw" :href="record.report_url" target="_blank" rel="noreferrer" class="report-row">
+                      <strong>{{ record.date || '日付未抽出' }} / {{ catchFishText(record) || '魚種未抽出' }}</strong>
+                      <span>{{ record.detected_point || record.list_location || '地点未抽出' }} / {{ record.nearby_reason || record.match_label || '周辺候補' }}</span>
+                      <em class="pill" :class="confidenceClass(record.confidence)">周辺候補 / {{ confidenceLabel(record.confidence) }}</em>
+                    </a>
+                  </div>
+                </div>
+              </div>
             </article>
 
             <article class="panel">

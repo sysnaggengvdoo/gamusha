@@ -40,18 +40,16 @@ const PORTSIDE_SHEET_HEADERS = {
 };
 
 const PORTSIDE_DEFAULT_ALIASES = [
-  { spot_id: '62_takanba', app_spot_name: '高ん場', alias: '高ん場', confidence: 'high', memo: 'アプリ釣り場名と同一' },
-  { spot_id: '74_motone', app_spot_name: '元根', alias: '元根', confidence: 'high', memo: 'アプリ釣り場名と同一' },
-  { spot_id: '75_kagurane', app_spot_name: 'カグラ根', alias: 'カグラ根', confidence: 'high', memo: 'アプリ釣り場名と同一' },
-  { spot_id: '75_kagurane', app_spot_name: 'カグラ根', alias: '神楽根', confidence: 'high', memo: '本文表記ゆれ' },
-  { spot_id: '76_ongoku', app_spot_name: '遠国', alias: '遠国', confidence: 'high', memo: 'アプリ釣り場名と同一' },
-  { spot_id: '76_ongoku', app_spot_name: '遠国', alias: '田牛周辺', confidence: 'low', memo: '広域表記のため断定しない' },
-  { spot_id: '77_aragami_taraisaki', app_spot_name: '荒神 タライ岬', alias: '荒神', confidence: 'medium', memo: '周辺表記の可能性あり' },
-  { spot_id: '77_aragami_taraisaki', app_spot_name: '荒神 タライ岬', alias: 'タライ岬', confidence: 'medium', memo: '周辺表記の可能性あり' },
-  { spot_id: '80_suiheiba', app_spot_name: '水平場 裏水平場', alias: '水平場', confidence: 'high', memo: 'アプリ釣り場名の短縮' },
-  { spot_id: '86_yoshida_ozone', app_spot_name: '吉田大根', alias: '吉田大根', confidence: 'high', memo: 'アプリ釣り場名と同一' },
-  { spot_id: '95_okatonbi', app_spot_name: '陸トンビ', alias: '陸トンビ', confidence: 'high', memo: 'アプリ釣り場名と同一' },
-  { spot_id: '96_kurosaki', app_spot_name: '黒崎', alias: '黒崎', confidence: 'high', memo: 'アプリ釣り場名と同一' },
+  { spot_id: '74_motone', app_spot_name: '元根', alias: '元根', confidence: 'high', memo: '名称一致' },
+  { spot_id: '75_kagurane', app_spot_name: 'カグラ根', alias: 'カグラ根', confidence: 'high', memo: '名称一致' },
+  { spot_id: '75_kagurane', app_spot_name: 'カグラ根', alias: '神楽根', confidence: 'high', memo: '表記ゆれ' },
+  { spot_id: '76_ongoku', app_spot_name: '遠国', alias: '遠国', confidence: 'high', memo: '名称一致' },
+  { spot_id: '77_aragami_taraisaki', app_spot_name: '荒神 タライ岬', alias: '荒神', confidence: 'high', memo: '略称' },
+  { spot_id: '77_aragami_taraisaki', app_spot_name: '荒神 タライ岬', alias: 'タライ岬', confidence: 'high', memo: '別名表記' },
+  { spot_id: '67_akane', app_spot_name: '赤根', alias: '赤根', confidence: 'medium', memo: '名称一致だがエリア確認必要' },
+  { spot_id: '69_akasaki', app_spot_name: '赤崎', alias: '赤崎', confidence: 'medium', memo: '名称一致' },
+  { spot_id: '96_kurosaki', app_spot_name: '黒崎', alias: '黒崎', confidence: 'medium', memo: '名称一致だが黒崎の段との混同注意' },
+  { spot_id: '96_kurosaki', app_spot_name: '黒崎', alias: '黒崎の段', confidence: 'medium', memo: '名称が似るため要確認' },
 ];
 
 const BASE_AREAS = {
@@ -170,27 +168,26 @@ function catchSummary_() {
 
 function catchBySpot_(spotId) {
   const spot = getSpotById(spotId);
-  const aliases = getPointAliasesForSpot_(spotId, spot);
-  const records = getRowsSafe_(SHEETS.catchRecords)
+  const allAliases = getAllPointAliases_();
+  const aliases = getPointAliasesForSpot_(spotId, spot, allAliases);
+  const spots = getSpots();
+  const allRecords = getRowsSafe_(SHEETS.catchRecords)
     .map(normalizeCatchRecord_)
-    .map((record) => {
-      const match = findAliasMatchForRecord_(record, aliases);
-      if (!match) return null;
-      return {
-        ...record,
-        spot_id: spotId,
-        spot_name: spot ? spot.name : match.app_spot_name,
-        alias: match.alias,
-        alias_confidence: match.confidence,
-        confidence: combineConfidence_(record.confidence, match.confidence),
-      };
-    })
-    .filter(Boolean)
+    .map((record) => enrichRecordWithAlias_(record, allAliases));
+
+  const records = allRecords
+    .map((record) => attachSpotMatch_(record, aliases, spotId, spot))
+    .filter((record) => record && record.match_scope === 'direct')
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const nearbyRecords = nearbyCatchRecordsForSpot_(spot, records, allRecords, spots)
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
   return {
     spot_id: spotId || '',
     spot_name: spot ? spot.name : '',
+    aliases,
     records,
+    nearby_records: nearbyRecords,
   };
 }
 
@@ -231,19 +228,24 @@ function ensureSheetHeaders_(ss, sheetName, headers) {
 function seedPointAliases_(ss) {
   const sheet = ss.getSheetByName(SHEETS.pointAliases);
   if (!sheet) return 0;
-  if (sheet.getLastRow() > 1) return 0;
   const headers = PORTSIDE_SHEET_HEADERS.point_aliases;
-  const values = PORTSIDE_DEFAULT_ALIASES.map((alias) => headers.map((header) => alias[header] || ''));
-  if (values.length > 0) sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  const existingRows = sheet.getLastRow() > 1 ? getRowsSafe_(SHEETS.pointAliases).map(normalizePointAlias_) : [];
+  const existingKeys = new Set(existingRows.map((row) => pointAliasKey_(row)));
+  const missingAliases = PORTSIDE_DEFAULT_ALIASES
+    .map(normalizePointAlias_)
+    .filter((alias) => !existingKeys.has(pointAliasKey_(alias)));
+  const values = missingAliases.map((alias) => headers.map((header) => alias[header] || ''));
+  if (values.length > 0) sheet.getRange(sheet.getLastRow() + 1, 1, values.length, headers.length).setValues(values);
   return values.length;
 }
 
-function getPointAliasesForSpot_(spotId, spot) {
-  const aliases = getAllPointAliases_()
+function getPointAliasesForSpot_(spotId, spot, aliases) {
+  const sourceAliases = aliases || getAllPointAliases_();
+  const spotAliases = sourceAliases
     .filter((row) => String(row.spot_id || '') === String(spotId || ''))
     .filter((row) => row.alias);
-  if (spot && spot.name && !aliases.some((row) => normalizeText_(row.alias) === normalizeText_(spot.name))) {
-    aliases.push({
+  if (spot && spot.name && !spotAliases.some((row) => normalizeText_(row.alias) === normalizeText_(spot.name))) {
+    spotAliases.push({
       spot_id: spot.spot_id,
       app_spot_name: spot.name,
       alias: spot.name,
@@ -251,11 +253,16 @@ function getPointAliasesForSpot_(spotId, spot) {
       memo: '釣り場名による自動マッチ',
     });
   }
-  return aliases;
+  return spotAliases;
 }
 
 function getAllPointAliases_() {
-  return getRowsSafe_(SHEETS.pointAliases).map(normalizePointAlias_).filter((row) => row.alias);
+  const rows = getRowsSafe_(SHEETS.pointAliases).map(normalizePointAlias_).filter((row) => row.alias);
+  return rows.length > 0 ? rows : PORTSIDE_DEFAULT_ALIASES.map(normalizePointAlias_);
+}
+
+function pointAliasKey_(alias) {
+  return [alias.spot_id, alias.alias].map(normalizeText_).join('|');
 }
 
 function enrichRecordWithAlias_(record, aliases) {
@@ -283,9 +290,93 @@ function findAliasMatchForRecord_(record, aliases) {
   for (const alias of rankedAliases) {
     const needle = normalizeText_(alias.alias);
     if (!needle) continue;
-    if (haystacks.some((text) => text === needle || (needle.length >= 2 && text.includes(needle)))) return alias;
+    if (haystacks.some((text) => isAliasHit_(text, needle))) return alias;
   }
   return null;
+}
+
+function isAliasHit_(text, needle) {
+  if (text === needle) return true;
+  if (needle.length < 2 || !text.includes(needle)) return false;
+  if (needle === '赤根' && text.includes('赤根島')) return false;
+  return true;
+}
+
+function attachSpotMatch_(record, aliases, spotId, spot) {
+  const match = findAliasMatchForRecord_(record, aliases);
+  if (!match) return null;
+  const confidence = combineConfidence_(record.confidence, match.confidence);
+  const lowConfidence = String(match.confidence || confidence).toLowerCase() === 'low';
+  return {
+    ...record,
+    spot_id: lowConfidence ? '' : spotId,
+    candidate_spot_id: spotId,
+    spot_name: spot ? spot.name : match.app_spot_name,
+    app_spot_name: spot ? spot.name : match.app_spot_name,
+    alias: match.alias,
+    alias_confidence: match.confidence,
+    confidence,
+    match_scope: lowConfidence ? 'nearby' : 'direct',
+    match_label: lowConfidence ? '周辺候補' : '釣り場紐づき',
+  };
+}
+
+function nearbyCatchRecordsForSpot_(spot, directRecords, allRecords, spots) {
+  if (!spot) return [];
+  const directKeys = new Set(directRecords.map(catchRecordKey_));
+  const nearby = [];
+
+  allRecords.forEach((record) => {
+    if (!isShibudaiCandidateRow_(record)) return;
+    if (directKeys.has(catchRecordKey_(record))) return;
+    if (record.candidate_spot_id === spot.spot_id && !record.spot_id) {
+      nearby.push(markNearbyRecord_(record, '低信頼aliasによる周辺候補'));
+    }
+  });
+
+  if (directRecords.length === 0) {
+    allRecords.forEach((record) => {
+      if (!isShibudaiCandidateRow_(record)) return;
+      if (directKeys.has(catchRecordKey_(record))) return;
+      const recordSpot = spotForCatchRecord_(record, spots);
+      if (recordSpot && sameBaseArea_(recordSpot, spot)) {
+        nearby.push(markNearbyRecord_(record, '同じbase_area内のシブダイ候補'));
+      }
+    });
+  }
+
+  const seen = new Set();
+  return nearby.filter((record) => {
+    const key = catchRecordKey_(record);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function markNearbyRecord_(record, reason) {
+  return {
+    ...record,
+    is_nearby: true,
+    match_scope: 'nearby',
+    match_label: '周辺候補',
+    nearby_reason: reason,
+    confidence: combineConfidence_(record.confidence, 'low'),
+  };
+}
+
+function catchRecordKey_(record) {
+  return [record.repo_id, record.fish_raw, record.report_url].map((value) => String(value || '')).join('|');
+}
+
+function spotForCatchRecord_(record, spots) {
+  const id = record.spot_id || record.candidate_spot_id;
+  return (spots || []).find((spot) => spot.spot_id === id) || null;
+}
+
+function sameBaseArea_(a, b) {
+  if (!a || !b) return false;
+  return Boolean((a.base_area && b.base_area && a.base_area === b.base_area) || (a.area && a.area === b.area));
 }
 
 function normalizeCatchRecord_(row) {
