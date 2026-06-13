@@ -625,14 +625,25 @@ const app = Vue.createApp({
       );
       const next = { ...this.goldenTimesBySpot };
       let okCount = 0;
+      const errors = [];
       results.forEach((result, index) => {
         if (result.status === "fulfilled" && result.value?.golden_times) {
           next[targets[index].spot_id] = { ...result.value, source: "gas" };
           okCount++;
+        } else {
+          const spotName = targets[index]?.name || targets[index]?.spot_id || "不明";
+          const message = result.status === "rejected" ? result.reason?.message : "GAS応答にgolden_timesがありません";
+          errors.push(`${spotName}: ${message || "不明なエラー"}`);
         }
       });
       this.goldenTimesBySpot = next;
-      this.goldenStatus = okCount > 0 ? `${okCount}件のGTを反映済み（潮位・潮流は推定）` : "GT取得失敗。ローカル推定を表示中";
+      if (okCount > 0) {
+        this.goldenStatus = errors.length > 0
+          ? `${okCount}件のGTを反映済み。一部失敗: ${errors[0]}`
+          : `${okCount}件のGTを反映済み（潮位・潮流は推定）`;
+      } else {
+        this.goldenStatus = `GT取得失敗: ${errors[0] || "詳細不明"}。ローカル推定を表示中`;
+      }
       this.goldenLoading = false;
     },
     goldenTimeData(spot) {
