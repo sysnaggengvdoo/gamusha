@@ -1,7 +1,19 @@
 const STORAGE_KEY = "shibudai_logs_v1";
-const GAS_API_URL = "";
+const GAS_API_URL = globalThis.SHIBUDAI_GAS_API_URL || "";
 
 const sampleSpots = [
+  { spot_id: "62_takanba", name: "高ん場", area: "南伊豆・外浦須崎", type: "地磯", access_min: "15-20", difficulty: 2, night_safety: 3, shibudai_score: 3, madai_score: 3, shimaaji_score: 2, recommended_method: "夜スルスル・夜カゴ", notes: "西風に強い万能磯。魚種多く調査価値あり。夜は下見必須。" },
+  { spot_id: "65_kuroshima_yoko", name: "黒島横の磯", area: "南伊豆・須崎", type: "地磯", access_min: "3", difficulty: 1, night_safety: 4, shibudai_score: 2, madai_score: 2, shimaaji_score: 1, recommended_method: "フカセ・エギング・軽め夜釣り", notes: "アクセス良好な保険候補。シブダイ本命より調査・練習向き。" },
+  { spot_id: "66_sakiyama_gakeshita", name: "崎山 崖下", area: "南伊豆・須崎", type: "地磯", access_min: "25-30", difficulty: 5, night_safety: 1, shibudai_score: 4, madai_score: 2, shimaaji_score: 2, recommended_method: "日中上級者向け", notes: "地形は魅力だが入磯危険度が高すぎる。夜釣り・単独は非推奨。" },
+  { spot_id: "67_akane", name: "赤根", area: "下田田牛・下田湾口", type: "地磯", access_min: "25-35", difficulty: 4, night_safety: 2, shibudai_score: 4, madai_score: 3, shimaaji_score: 2, recommended_method: "太仕掛けスルスル・夜カゴ", notes: "魚種豊富な荒根系。シブダイ調査価値高いが夜の入釣は慎重に。" },
+  { spot_id: "69_akasaki", name: "赤崎", area: "下田田牛・下田湾口", type: "地磯", access_min: "15-20", difficulty: 3, night_safety: 3, shibudai_score: 3, madai_score: 3, shimaaji_score: 2, recommended_method: "夜スルスル・夜カゴ", notes: "湾口の大型地磯。バランス型で夜調査候補。" },
+  { spot_id: "71_ganjima", name: "雁島", area: "下田田牛・和歌ノ浦", type: "小磯", access_min: "2-3", difficulty: 1, night_safety: 4, shibudai_score: 1, madai_score: 1, shimaaji_score: 1, recommended_method: "フカセ・エギング", notes: "安全寄りの小場所。シブダイ本命ではなく保険候補。" },
+  { spot_id: "72_akanejima", name: "赤根島", area: "下田田牛・下田湾口", type: "地磯", access_min: "10-15", difficulty: 3, night_safety: 3, shibudai_score: 3, madai_score: 3, shimaaji_score: 2, recommended_method: "夜スルスル・夜カゴ", notes: "湾口絡みで魚種多い。潮が効く夜に調査価値あり。" },
+  { spot_id: "73_noroshizaki", name: "狼煙崎", area: "下田田牛", type: "地磯", access_min: "25-40", difficulty: 4, night_safety: 1, shibudai_score: 4, madai_score: 2, shimaaji_score: 2, recommended_method: "日中下見・上級者向け", notes: "地形は魅力だが夜釣り安全性が低い。単独夜釣り非推奨。" },
+  { spot_id: "nagaiso", name: "長磯周辺", area: "下田田牛", type: "低磯", access_min: "不明", difficulty: 2, night_safety: 2, shibudai_score: 2, madai_score: 2, shimaaji_score: 1, recommended_method: "軽め夜釣り・調査", notes: "低磯で波を被りやすい。凪限定のサブ候補。" },
+  { spot_id: "74_motone", name: "元根", area: "下田田牛", type: "地磯", access_min: "8-10", difficulty: 3, night_safety: 3, shibudai_score: 4, madai_score: 4, shimaaji_score: 2, recommended_method: "太仕掛けスルスル本命", notes: "田牛エリアの現実的本命候補。根際・水道・砂地との境目が狙い。" },
+  { spot_id: "75_kagurane", name: "カグラ根", area: "下田田牛", type: "地磯", access_min: "5-7", difficulty: 2, night_safety: 4, shibudai_score: 2, madai_score: 2, shimaaji_score: 1, recommended_method: "短時間調査・保険", notes: "砂地とワンド要素が強い。シブダイ本命よりサブ候補。" },
+  { spot_id: "76_ongoku", name: "遠国", area: "下田田牛", type: "地磯", access_min: "15-20", difficulty: 4, night_safety: 2, shibudai_score: 5, madai_score: 3, shimaaji_score: 2, recommended_method: "太仕掛けスルスル本命", notes: "荒根・水道・サラシあり。安全条件つき本命。" },
   { spot_id: "77_aragami_taraisaki", name: "荒神 タライ岬", area: "下田田牛", type: "地磯", access_min: "25-30", difficulty: 4, night_safety: 2, shibudai_score: 5, madai_score: 3, shimaaji_score: 2, recommended_method: "太仕掛けスルスル本命", notes: "田牛代表級の大場所。荒根・深場・潮通しがありシブダイ本命候補。" },
   { spot_id: "78_takaiso_takamizaki", name: "高磯 高見崎", area: "小稲石廊崎", type: "地磯", access_min: "10-20", difficulty: 3, night_safety: 2, shibudai_score: 3, madai_score: 2, shimaaji_score: 2, recommended_method: "夜スルスル調査", notes: "古いルートを通る荒磯。石物・ヒラスズキ寄りで調査候補。" },
   { spot_id: "79_umanose", name: "馬の背", area: "小稲石廊崎", type: "地磯", access_min: "25-30", difficulty: 5, night_safety: 1, shibudai_score: 5, madai_score: 3, shimaaji_score: 2, recommended_method: "日中下見・上級者向け", notes: "魚の匂いは強いが夜は危険。安全ゲートで弾く候補。" },
