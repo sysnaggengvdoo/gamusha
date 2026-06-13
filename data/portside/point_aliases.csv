@@ -1,0 +1,7 @@
+﻿spot_id,app_spot_name,alias,confidence,memo
+62_takanba,高ん場,高ん場,high,アプリ釣り場名と同一
+74_motone,元根,元根,high,アプリ釣り場名と同一
+75_kagurane,カグラ根,カグラ根,high,アプリ釣り場名と同一
+75_kagurane,カグラ根,神楽根,high,本文表記ゆれ
+76_ongoku,遠国,遠国,high,アプリ釣り場名と同一
+76_ongoku,遠国,田牛周辺,low,広域表記のため断定しない
