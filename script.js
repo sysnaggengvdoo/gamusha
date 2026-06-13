@@ -1,0 +1,406 @@
+const STORAGE_KEY = "shibudai_logs_v1";
+const GAS_API_URL = "";
+
+const sampleSpots = [
+  { spot_id: "77_aragami_taraisaki", name: "荒神 タライ岬", area: "下田田牛", type: "地磯", access_min: "25-30", difficulty: 4, night_safety: 2, shibudai_score: 5, madai_score: 3, shimaaji_score: 2, recommended_method: "太仕掛けスルスル本命", notes: "田牛代表級の大場所。荒根・深場・潮通しがありシブダイ本命候補。" },
+  { spot_id: "78_takaiso_takamizaki", name: "高磯 高見崎", area: "小稲石廊崎", type: "地磯", access_min: "10-20", difficulty: 3, night_safety: 2, shibudai_score: 3, madai_score: 2, shimaaji_score: 2, recommended_method: "夜スルスル調査", notes: "古いルートを通る荒磯。石物・ヒラスズキ寄りで調査候補。" },
+  { spot_id: "79_umanose", name: "馬の背", area: "小稲石廊崎", type: "地磯", access_min: "25-30", difficulty: 5, night_safety: 1, shibudai_score: 5, madai_score: 3, shimaaji_score: 2, recommended_method: "日中下見・上級者向け", notes: "魚の匂いは強いが夜は危険。安全ゲートで弾く候補。" },
+  { spot_id: "80_suiheiba", name: "水平場 裏水平場", area: "小稲石廊崎", type: "地磯", access_min: "25-30", difficulty: 3, night_safety: 3, shibudai_score: 4, madai_score: 3, shimaaji_score: 2, recommended_method: "太仕掛けスルスル・夜カゴ", notes: "石廊崎では現実的な本命候補。根際・水道・サラシ切れ目狙い。" },
+  { spot_id: "81_yunohana", name: "湯の花", area: "小稲石廊崎", type: "地磯", access_min: "25-30", difficulty: 3, night_safety: 2, shibudai_score: 3, madai_score: 2, shimaaji_score: 2, recommended_method: "夜スルスル調査", notes: "人気磯。サラシと根周り条件で調査候補。" },
+  { spot_id: "82_naraiomote", name: "ナライ表", area: "小稲石廊崎", type: "地磯", access_min: "25-30", difficulty: 3, night_safety: 3, shibudai_score: 4, madai_score: 3, shimaaji_score: 2, recommended_method: "太仕掛けスルスル・夜カゴ", notes: "収容力と魚影のバランス良。シブダイ本命候補に入る。" },
+  { spot_id: "83_tsunohonze", name: "ツノホンゼ", area: "小稲石廊崎", type: "地磯", access_min: "20-25", difficulty: 4, night_safety: 2, shibudai_score: 4, madai_score: 3, shimaaji_score: 2, recommended_method: "太仕掛けスルスル本命", notes: "ほぼ沖磯感のある一級地磯。夜は下見必須。" },
+  { spot_id: "86_yoshida_ozone", name: "吉田大根", area: "中木吉田", type: "地磯", access_min: "25-30", difficulty: 4, night_safety: 2, shibudai_score: 5, madai_score: 3, shimaaji_score: 3, recommended_method: "太仕掛けスルスル本命", notes: "潮通し抜群の大場所。シブダイ超本命級だが安全条件つき。" },
+  { spot_id: "90_kokeshijima_ura", name: "こけし島裏の磯", area: "妻良伊浜", type: "地磯", access_min: "30-35", difficulty: 3, night_safety: 3, shibudai_score: 3, madai_score: 2, shimaaji_score: 1, recommended_method: "夜スルスル調査", notes: "湾内外の境目。潮が通れば石物・アオリ絡みで調査価値あり。" },
+  { spot_id: "94_zappun", name: "ザップン", area: "雲見松崎", type: "地磯", access_min: "30-40", difficulty: 4, night_safety: 1, shibudai_score: 2, madai_score: 2, shimaaji_score: 1, recommended_method: "日中上物向き", notes: "メジナ・ヒラスズキ寄り。シブダイ本命ではない。" },
+  { spot_id: "95_okatonbi", name: "陸トンビ", area: "雲見松崎", type: "地磯", access_min: "10-12", difficulty: 2, night_safety: 3, shibudai_score: 3, madai_score: 2, shimaaji_score: 2, recommended_method: "夜スルスル調査", notes: "潮通しよく石物・イサキ絡み。西伊豆側の調査候補。" },
+  { spot_id: "96_kurosaki", name: "黒崎", area: "雲見松崎", type: "地磯", access_min: "15-20", difficulty: 2, night_safety: 3, shibudai_score: 3, madai_score: 2, shimaaji_score: 2, recommended_method: "夜スルスル調査", notes: "西伊豆代表級の一級地磯。夜イカタン調査あり。" },
+  { spot_id: "97_hagiyazaki", name: "萩谷崎", area: "雲見松崎", type: "地磯", access_min: "15-20", difficulty: 2, night_safety: 3, shibudai_score: 2, madai_score: 2, shimaaji_score: 1, recommended_method: "サブ調査", notes: "ゴロタ・砂地・ワンドが絡む多魚種場。シブダイ優先度は低め。" },
+  { spot_id: "98_murozaki", name: "室崎", area: "雲見松崎", type: "地磯", access_min: "20-30", difficulty: 4, night_safety: 2, shibudai_score: 4, madai_score: 3, shimaaji_score: 2, recommended_method: "夜スルスル調査", notes: "魚影は濃いが険しさあり。西伊豆側では面白い候補。" },
+  { spot_id: "99_ajirozaki", name: "安城岬", area: "仁科田子", type: "地磯", access_min: "20-25", difficulty: 3, night_safety: 3, shibudai_score: 2, madai_score: 2, shimaaji_score: 1, recommended_method: "サブ調査", notes: "ゴロタ・砂浜・磯・ワンドが揃う万能場。シブダイ本命ではない。" },
+  { spot_id: "100_onbi", name: "オンビ", area: "仁科田子", type: "地磯", access_min: "6", difficulty: 2, night_safety: 4, shibudai_score: 2, madai_score: 2, shimaaji_score: 1, recommended_method: "夜調査・ぶっ込み", notes: "入りやすくハマフエフキも絡む。安全寄りの夜調査候補。" },
+];
+
+const defaultConditions = {
+  waterTemp: 24.5,
+  tempTrend: -0.3,
+  tide: "moving",
+  moon: "dark",
+  waveHeight: 0.8,
+  swellDirection: "SW",
+  windDirection: "N",
+  windSpeed: 4,
+  thunderRisk: false,
+  soloNight: true,
+  routeRisk: false,
+  noLifeJacket: false,
+};
+
+function clamp(value, min = 0, max = 100) {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+function scoreWaterTemp(temp, trend) {
+  let score = 50;
+  if (temp >= 25) score += 25;
+  else if (temp >= 23) score += 20;
+  else if (temp >= 21) score += 10;
+  else score -= 10;
+
+  if (trend >= -0.5 && trend <= 0.8) score += 15;
+  if (trend < -1.0) score -= 25;
+  if (trend > 1.5) score += 5;
+  return clamp(score);
+}
+
+function scoreTide(tide, spot) {
+  let score = 50;
+  if (tide === "moving") score += 25;
+  if (tide === "start") score += 22;
+  if (tide === "fast") score -= 8;
+  if (tide === "slack") score -= 18;
+  if ((spot.good_tide || "").includes("上げ") && ["moving", "start"].includes(tide)) score += 8;
+  if ((spot.good_tide || "").includes("下げ") && ["moving", "start"].includes(tide)) score += 5;
+  return clamp(score);
+}
+
+function scoreMoon(moon, spot) {
+  let score = 55;
+  if (moon === "dark") score += 28;
+  if (moon === "low") score += 20;
+  if (moon === "cloud") score += 16;
+  if (moon === "bright") score -= spot.bottom_type === "荒根" ? 4 : 15;
+  return clamp(score);
+}
+
+function scoreSea(conditions, spot) {
+  let score = 65;
+  const ngDirections = String(spot.ng_wave_direction || "").split(",").map((item) => item.trim());
+  if (conditions.waveHeight <= 0.8) score += 18;
+  else if (conditions.waveHeight <= 1.2) score += 6;
+  else if (conditions.waveHeight <= 1.6) score -= 12;
+  else score -= 40;
+
+  if (ngDirections.includes(conditions.swellDirection)) score -= conditions.waveHeight >= 1.0 ? 35 : 14;
+  if (conditions.windSpeed <= 5) score += 10;
+  else if (conditions.windSpeed <= 9) score -= 5;
+  else score -= 28;
+
+  if (conditions.windDirection === spot.direction) score -= 8;
+  return clamp(score);
+}
+
+function scoreSpotPotential(spot) {
+  const potential = Number(spot.shibudai_score || spot.shibudai_potential || 3) * 18;
+  const landing = (6 - Number(spot.difficulty || spot.landing_difficulty || 3)) * 3;
+  const safety = Number(spot.night_safety || 3) * 2;
+  const bottom = spot.bottom_type === "荒根" ? 8 : spot.bottom_type === "ゴロタ" ? 5 : 2;
+  return clamp(potential + landing + safety + bottom);
+}
+
+function scorePastLogs(logs, spotId) {
+  const targetLogs = logs.filter((log) => log.spot_id === spotId);
+  if (targetLogs.length === 0) return 45;
+  const catchBonus = targetLogs.filter((log) => /シブダイ|フエダイ/.test(log.catch_result || "")).length * 12;
+  const dangerPenalty = targetLogs.filter((log) => log.danger_note).length * 6;
+  const lostBonus = targetLogs.reduce((sum, log) => sum + Number(log.lost_fish || 0), 0) * 4;
+  return clamp(45 + catchBonus + lostBonus - dangerPenalty);
+}
+
+function safetyGate(conditions, spot) {
+  const reasons = [];
+  const ngDirections = String(spot.ng_wave_direction || "").split(",").map((item) => item.trim());
+  let penalty = 0;
+  let blocked = false;
+
+  if (Number(spot.night_safety) <= 1) {
+    blocked = true;
+    reasons.push("夜釣り非推奨。釣り場マスターの安全度が低い。");
+  } else if (Number(spot.night_safety) === 2) {
+    penalty += 16;
+    reasons.push("夜釣り注意。明るいうちの下見と撤退ライン確認が必須。");
+  }
+  if (Number(spot.difficulty) >= 5) {
+    penalty += 12;
+    reasons.push("難度5の上級者向け。単独夜釣りは避ける。");
+  }
+  if (conditions.noLifeJacket) {
+    blocked = true;
+    reasons.push("装備不足。ライフジャケットと磯靴なしは出撃不可。");
+  }
+  if (conditions.thunderRisk) {
+    blocked = true;
+    reasons.push("雷リスクあり。スコアに関係なく出撃不可。");
+  }
+  if (conditions.waveHeight >= 1.7) {
+    blocked = true;
+    reasons.push("波高が危険域。低い磯や外向き堤防は除外。");
+  }
+  if (ngDirections.includes(conditions.swellDirection) && conditions.waveHeight >= 1.2) {
+    blocked = true;
+    reasons.push(`${conditions.swellDirection}うねりがこの釣り場のNG波向き。`);
+  }
+  if (conditions.windSpeed >= 12) {
+    blocked = true;
+    reasons.push("風速が強すぎる。夜磯では操作性と撤退判断が落ちる。");
+  }
+  if (conditions.routeRisk) {
+    penalty += 18;
+    reasons.push("満潮で帰路が危険。入るなら撤退時刻を先に決める。");
+  }
+  if (conditions.soloNight && Number(spot.difficulty || spot.landing_difficulty || 3) >= 4) {
+    penalty += 12;
+    reasons.push("単独夜磯かつランディング難度高め。無理な取り込みは不可。");
+  }
+  if (Number(spot.difficulty || spot.landing_difficulty || 3) >= 5) {
+    penalty += 8;
+    reasons.push("ランディング難度が最大。掛けてからの安全な立ち位置が必要。");
+  }
+  return { blocked, penalty, reasons };
+}
+
+function judgeScore(score, blocked) {
+  if (blocked) return "出撃不可";
+  if (score >= 80) return "本命日";
+  if (score >= 65) return "出撃候補";
+  if (score >= 50) return "条件付き";
+  if (score >= 35) return "厳しい";
+  return "見送り";
+}
+
+function bestWindowFromScore(score, blocked) {
+  if (blocked) return "見送り";
+  if (score >= 80) return "21:00〜23:00";
+  if (score >= 65) return "20:00〜22:00";
+  if (score >= 50) return "22:00〜0:00";
+  return "下見向き";
+}
+
+function createResult(spot, conditions, logs) {
+  const water = scoreWaterTemp(conditions.waterTemp, conditions.tempTrend);
+  const tide = scoreTide(conditions.tide, spot);
+  const sea = scoreSea(conditions, spot);
+  const moon = scoreMoon(conditions.moon, spot);
+  const spotScore = scoreSpotPotential(spot);
+  const past = scorePastLogs(logs, spot.spot_id);
+  const safety = safetyGate(conditions, spot);
+  const confidencePenalty = logs.some((log) => log.spot_id === spot.spot_id) ? 0 : 4;
+
+  const raw =
+    water * 0.2 +
+    tide * 0.2 +
+    sea * 0.2 +
+    moon * 0.1 +
+    spotScore * 0.15 +
+    past * 0.15 -
+    safety.penalty -
+    confidencePenalty;
+
+  const score = safety.blocked ? 0 : clamp(raw);
+  const judge = judgeScore(score, safety.blocked);
+  const reasons = [
+    `水温 ${water}/100、潮 ${tide}/100、風波 ${sea}/100、月 ${moon}/100。`,
+    `地形適性 ${spotScore}/100、過去ログ補正 ${past}/100。`,
+    ...safety.reasons,
+  ];
+
+  if (!safety.blocked && safety.penalty === 0) {
+    reasons.push("安全ゲートは通過。現地で波周期と退路を再確認。");
+  }
+
+  return {
+    score,
+    judge,
+    safetyLabel: safetyLabel(spot, safety.blocked),
+    bestWindow: bestWindowFromScore(score, safety.blocked),
+    parts: { water, tide, sea, moon, spot: spotScore, past, dangerPenalty: safety.penalty, confidencePenalty },
+    reasons,
+  };
+}
+
+function safetyLabel(spot, blocked = false) {
+  const safety = Number(spot.night_safety || 3);
+  if (blocked || safety <= 1) return "夜釣り非推奨";
+  if (safety === 2) return "夜釣り注意";
+  if (safety === 3) return "要確認";
+  return "安全寄り";
+}
+
+function createTimeline(baseScore, blocked) {
+  const slots = [
+    ["19:00", -16, "まだ明るい。下見と立ち位置確認"],
+    ["20:00", -4, "潮が効き始めるなら候補"],
+    ["21:00", 8, "本命筋"],
+    ["22:00", 12, "勝負時間"],
+    ["23:00", 2, "継続可"],
+    ["0:00", -14, "潮止まり気味なら撤退判断"],
+  ];
+  return slots.map(([time, delta, comment]) => ({
+    time,
+    score: blocked ? 0 : clamp(baseScore + delta),
+    comment: blocked ? "安全NGのため見送り" : comment,
+  }));
+}
+
+async function gasGet(action, params = {}) {
+  if (!GAS_API_URL) return null;
+  const url = new URL(GAS_API_URL);
+  url.searchParams.set("action", action);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") url.searchParams.set(key, value);
+  });
+  const response = await fetch(url.toString());
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || "GAS API error");
+  return payload.data;
+}
+
+async function gasPost(body) {
+  if (!GAS_API_URL) return null;
+  const response = await fetch(GAS_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json();
+  if (!payload.ok) throw new Error(payload.error || "GAS API error");
+  return payload.data;
+}
+
+const app = Vue.createApp({
+  data() {
+    const today = new Date().toISOString().slice(0, 10);
+    return {
+      nav: [
+        { id: "spots", label: "一覧" },
+        { id: "detail", label: "詳細" },
+        { id: "timeline", label: "時合い" },
+        { id: "log", label: "ログ" },
+        { id: "design", label: "設計" },
+      ],
+      view: "spots",
+      gasApiUrl: GAS_API_URL,
+      apiStatus: GAS_API_URL ? "GAS APIへ接続準備中" : "ローカルサンプルDBで表示中",
+      spotSort: "shibudai_score",
+      spots: sampleSpots,
+      selectedSpotId: sampleSpots[0].spot_id,
+      conditions: { ...defaultConditions },
+      logs: JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]"),
+      logForm: {
+        log_id: "",
+        date: today,
+        spot_id: sampleSpots[0].spot_id,
+        method: "太仕掛けスルスル夜フカセ",
+        water_temp: 24.5,
+        bite_time: "",
+        catch_result: "",
+        lost_fish: 0,
+        utsubo_count: 0,
+        snag_count: 0,
+        danger_note: "",
+        memo: "",
+      },
+    };
+  },
+  async mounted() {
+    await this.loadFromGas();
+  },
+  computed: {
+    rankedSpots() {
+      return [...this.spots].sort((a, b) => {
+        if (this.spotSort === "night_safety") return Number(b.night_safety || 0) - Number(a.night_safety || 0);
+        if (this.spotSort === "difficulty") return Number(a.difficulty || 0) - Number(b.difficulty || 0);
+        if (this.spotSort === "score") return this.scoreSpot(b).score - this.scoreSpot(a).score;
+        return Number(b.shibudai_score || 0) - Number(a.shibudai_score || 0) || Number(b.night_safety || 0) - Number(a.night_safety || 0);
+      });
+    },
+    topSpot() {
+      return this.rankedSpots[0];
+    },
+    topResult() {
+      return this.scoreSpot(this.topSpot);
+    },
+    selectedSpot() {
+      return this.spots.find((spot) => spot.spot_id === this.selectedSpotId) || this.spots[0];
+    },
+    selectedResult() {
+      return this.scoreSpot(this.selectedSpot);
+    },
+    timeline() {
+      return createTimeline(this.selectedResult.score, this.selectedResult.judge === "出撃不可");
+    },
+  },
+  methods: {
+    async loadFromGas() {
+      if (!GAS_API_URL) return;
+      try {
+        const [spots, logs] = await Promise.all([gasGet("getSpots"), gasGet("getLogs")]);
+        if (Array.isArray(spots) && spots.length > 0) {
+          this.spots = spots;
+          if (!this.spots.some((spot) => spot.spot_id === this.selectedSpotId)) {
+            this.selectedSpotId = this.spots[0].spot_id;
+            this.logForm.spot_id = this.spots[0].spot_id;
+          }
+        }
+        if (Array.isArray(logs)) this.logs = logs;
+        this.apiStatus = "GAS APIからスプレッドシートDBを読み込み済み";
+      } catch (error) {
+        this.apiStatus = `GAS API読み込み失敗。ローカルサンプルで表示中: ${error.message}`;
+      }
+    },
+    scoreSpot(spot) {
+      return createResult(spot, this.conditions, this.logs);
+    },
+    judgeClass(judge) {
+      return {
+        "is-best": judge === "本命日",
+        "is-candidate": judge === "出撃候補",
+        "is-conditional": judge === "条件付き",
+        "is-hard": judge === "厳しい" || judge === "見送り",
+        "is-blocked": judge === "出撃不可",
+      };
+    },
+    safetyLabel(spot) {
+      return safetyLabel(spot, this.scoreSpot(spot).judge === "出撃不可");
+    },
+    safetyClass(spot) {
+      const label = this.safetyLabel(spot);
+      return {
+        "is-blocked": label === "夜釣り非推奨",
+        "is-conditional": label === "夜釣り注意",
+        "is-candidate": label === "安全寄り",
+        "is-hard": label === "要確認",
+      };
+    },
+    selectSpot(spotId, nextView) {
+      this.selectedSpotId = spotId;
+      this.logForm.spot_id = spotId;
+      this.view = nextView;
+    },
+    resetConditions() {
+      this.conditions = { ...defaultConditions };
+    },
+    spotName(spotId) {
+      return this.spots.find((spot) => spot.spot_id === spotId)?.name || spotId;
+    },
+    async saveLog() {
+      const log = { ...this.logForm, log_id: `log-${Date.now()}` };
+      try {
+        await gasPost({ action: "saveLog", log });
+        this.apiStatus = "GAS APIへログ保存済み";
+      } catch (error) {
+        this.apiStatus = GAS_API_URL ? `GAS保存失敗。ブラウザ内に保存: ${error.message}` : "ブラウザ内にログ保存済み";
+      }
+      this.logs = [log, ...this.logs];
+      if (!GAS_API_URL) localStorage.setItem(STORAGE_KEY, JSON.stringify(this.logs));
+      this.logForm.catch_result = "";
+      this.logForm.bite_time = "";
+      this.logForm.danger_note = "";
+      this.logForm.memo = "";
+      this.logForm.lost_fish = 0;
+      this.logForm.utsubo_count = 0;
+      this.logForm.snag_count = 0;
+    },
+  },
+});
+
+app.mount("#app");
