@@ -7,12 +7,60 @@ const SHEETS = {
 };
 
 const BASE_AREAS = {
-  '田牛': { latitude: 34.654, longitude: 138.917 },
-  '石廊崎': { latitude: 34.604, longitude: 138.844 },
+  '外浦須崎': { latitude: 34.666, longitude: 138.987 },
+  '下田田牛': { latitude: 34.642, longitude: 138.918 },
+  '小稲石廊崎': { latitude: 34.602, longitude: 138.843 },
   '中木吉田': { latitude: 34.628, longitude: 138.798 },
+  '妻良伊浜': { latitude: 34.667, longitude: 138.784 },
   '雲見松崎': { latitude: 34.724, longitude: 138.742 },
   '仁科田子': { latitude: 34.802, longitude: 138.760 },
+  '田牛': { latitude: 34.642, longitude: 138.918 },
+  '石廊崎': { latitude: 34.602, longitude: 138.843 },
 };
+
+const AREA_BASE_AREA_MAP = {
+  '南伊豆・外浦須崎': '外浦須崎',
+  '南伊豆・須崎': '外浦須崎',
+  '下田田牛・下田湾口': '下田田牛',
+  '下田田牛・和歌ノ浦': '下田田牛',
+  '下田田牛': '下田田牛',
+  '小稲石廊崎': '小稲石廊崎',
+  '中木吉田': '中木吉田',
+  '妻良伊浜': '妻良伊浜',
+  '雲見松崎': '雲見松崎',
+  '仁科田子': '仁科田子',
+};
+
+const SPOT_COORDINATES = [
+  { spot_id: '62_takanba', latitude: 34.66595429372546, longitude: 138.9873055540375, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '65_kuroshima_yoko', latitude: 34.65426782417559, longitude: 138.97066067517838, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '66_sakiyama_gakeshita', latitude: 34.65377453625561, longitude: 138.97392028652447, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '67_akane', latitude: 34.65304613324002, longitude: 138.9768772289867, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '69_akasaki', latitude: 34.6524524078731, longitude: 138.95424055676256, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '71_ganjima', latitude: 34.66737458063759, longitude: 138.94924154399172, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '72_akanejima', latitude: 34.66261331702966, longitude: 138.9470681525203, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '73_noroshizaki', latitude: 34.6621708470976, longitude: 138.94146867988673, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: 'nagaiso', latitude: 34.64485409927357, longitude: 138.91799374628604, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '74_motone', latitude: 34.64252154653855, longitude: 138.91769486847107, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '75_kagurane', latitude: 34.64158415200717, longitude: 138.9163332129774, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '76_ongoku', latitude: 34.631407151077035, longitude: 138.90766167981823, coord_accuracy: 'exact', coordinate_note: 'ユーザー再確認座標' },
+  { spot_id: '77_aragami_taraisaki', latitude: 34.62856742719255, longitude: 138.90017626229135, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '78_takaiso_takamizaki', latitude: 34.62450084764903, longitude: 138.88976346852775, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '79_umanose', latitude: 34.601874894939705, longitude: 138.84610014891663, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '80_suiheiba', latitude: 34.601691921431076, longitude: 138.84533396162823, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '81_yunohana', latitude: 34.60150246320644, longitude: 138.84229939001986, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '82_naraiomote', latitude: 34.60183364764506, longitude: 138.84131494194511, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '83_tsunohonze', latitude: 34.603712922850185, longitude: 138.83809507432585, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '86_yoshida_ozone', latitude: 34.636902553185855, longitude: 138.78949726418423, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '90_kokeshijima_ura', latitude: 34.666680262689525, longitude: 138.78363252083324, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '94_zappun', latitude: 34.71512159674666, longitude: 138.74220405903077, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '95_okatonbi', latitude: 34.72841388427518, longitude: 138.74172547582492, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '96_kurosaki', latitude: 34.73621197019109, longitude: 138.7498091400067, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '97_hagiyazaki', latitude: 34.745850774653306, longitude: 138.75487720942178, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '98_murozaki', latitude: 34.752510999095485, longitude: 138.76490781932355, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '99_ajirozaki', latitude: 34.771779995331265, longitude: 138.7623452687985, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+  { spot_id: '100_onbi', latitude: 34.77472702255147, longitude: 138.76746673650615, coord_accuracy: 'exact', coordinate_note: 'ユーザー確認座標' },
+];
 
 function doGet(e) {
   try {
@@ -35,6 +83,50 @@ function getSpots() {
 
 function getSpotById(spot_id) {
   return getSpots().find((spot) => spot.spot_id === spot_id) || null;
+}
+
+function setupSpotCoordinates() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEETS.spots);
+  if (!sheet) throw new Error('spots sheet not found');
+  const requiredHeaders = ['latitude', 'longitude', 'coord_accuracy', 'coordinate_note', 'base_area'];
+  const values = sheet.getDataRange().getValues();
+  if (values.length === 0) throw new Error('spots sheet has no header row');
+  let headers = values[0].map(String);
+  const missingHeaders = requiredHeaders.filter((header) => !headers.includes(header));
+  if (missingHeaders.length > 0) {
+    sheet.getRange(1, headers.length + 1, 1, missingHeaders.length).setValues([missingHeaders]);
+    headers = headers.concat(missingHeaders);
+    values[0] = headers;
+  }
+
+  const column = Object.fromEntries(headers.map((header, index) => [header, index]));
+  if (column.spot_id === undefined) throw new Error('spots sheet requires spot_id column');
+  const coordinatesById = Object.fromEntries(SPOT_COORDINATES.map((spot) => [spot.spot_id, spot]));
+  const foundIds = {};
+  let updated = 0;
+
+  for (let rowIndex = 1; rowIndex < values.length; rowIndex++) {
+    const row = values[rowIndex];
+    while (row.length < headers.length) row.push('');
+    const spotId = String(row[column.spot_id] || '');
+    const coordinate = coordinatesById[spotId];
+    if (!coordinate) continue;
+    row[column.latitude] = coordinate.latitude;
+    row[column.longitude] = coordinate.longitude;
+    row[column.coord_accuracy] = coordinate.coord_accuracy;
+    row[column.coordinate_note] = coordinate.coordinate_note;
+    row[column.base_area] = baseAreaFor_(row[column.area]);
+    foundIds[spotId] = true;
+    updated++;
+  }
+
+  sheet.getRange(1, 1, values.length, headers.length).setValues(values);
+  const missingSpotIds = SPOT_COORDINATES
+    .map((spot) => spot.spot_id)
+    .filter((spotId) => !foundIds[spotId]);
+  const result = { updated, missingSpotIds };
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
 }
 
 function doPost(e) {
@@ -257,6 +349,11 @@ function scoreSpot_(spot, condition, logs) {
     shimaaji_score: spot.shimaaji_score,
     recommended_method: spot.recommended_method,
     notes: spot.notes,
+    base_area: spot.base_area,
+    latitude: spot.latitude,
+    longitude: spot.longitude,
+    coord_accuracy: spot.coord_accuracy,
+    coordinate_note: spot.coordinate_note,
     score,
     judge,
     best_window: bestWindow_(score, safety.blocked),
@@ -279,9 +376,11 @@ function normalizeSpot_(row) {
     shimaaji_score: Number(row.shimaaji_score || 0),
     recommended_method: String(row.recommended_method || ''),
     notes: String(row.notes || ''),
-    base_area: String(row.base_area || ''),
-    latitude: Number(row.latitude || 0),
-    longitude: Number(row.longitude || 0),
+    base_area: String(row.base_area || baseAreaFor_(row.area) || ''),
+    latitude: optionalNumber_(row.latitude),
+    longitude: optionalNumber_(row.longitude),
+    coord_accuracy: String(row.coord_accuracy || ''),
+    coordinate_note: String(row.coordinate_note || ''),
     ng_swell_direction: String(row.ng_swell_direction || ''),
     danger_tide_level: String(row.danger_tide_level || ''),
   };
@@ -447,6 +546,16 @@ function toBool_(value) {
   return value === true || value === 'TRUE' || value === 'true' || value === 1 || value === '1';
 }
 
+function optionalNumber_(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const number = Number(value);
+  return isFinite(number) ? number : '';
+}
+
+function baseAreaFor_(area) {
+  return AREA_BASE_AREA_MAP[String(area || '')] || String(area || '');
+}
+
 function testGetLatestCondition() {
   const condition = getLatestCondition_();
   Logger.log(JSON.stringify(condition, null, 2));
@@ -472,4 +581,8 @@ function testForecast() {
   ).getContent();
   Logger.log(text);
   return JSON.parse(text);
+}
+
+function testSetupSpotCoordinates() {
+  return setupSpotCoordinates();
 }

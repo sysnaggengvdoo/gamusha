@@ -32,6 +32,55 @@ const sampleSpots = [
   { spot_id: "100_onbi", name: "オンビ", area: "仁科田子", type: "地磯", access_min: "6", difficulty: 2, night_safety: 4, shibudai_score: 2, madai_score: 2, shimaaji_score: 1, recommended_method: "夜調査・ぶっ込み", notes: "入りやすくハマフエフキも絡む。安全寄りの夜調査候補。" },
 ];
 
+const areaBaseAreaMap = {
+  "南伊豆・外浦須崎": "外浦須崎",
+  "南伊豆・須崎": "外浦須崎",
+  "下田田牛・下田湾口": "下田田牛",
+  "下田田牛・和歌ノ浦": "下田田牛",
+  "下田田牛": "下田田牛",
+  "小稲石廊崎": "小稲石廊崎",
+  "中木吉田": "中木吉田",
+  "妻良伊浜": "妻良伊浜",
+  "雲見松崎": "雲見松崎",
+  "仁科田子": "仁科田子",
+};
+
+const spotCoordinates = {
+  "62_takanba": { latitude: 34.66595429372546, longitude: 138.9873055540375, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "65_kuroshima_yoko": { latitude: 34.65426782417559, longitude: 138.97066067517838, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "66_sakiyama_gakeshita": { latitude: 34.65377453625561, longitude: 138.97392028652447, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "67_akane": { latitude: 34.65304613324002, longitude: 138.9768772289867, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "69_akasaki": { latitude: 34.6524524078731, longitude: 138.95424055676256, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "71_ganjima": { latitude: 34.66737458063759, longitude: 138.94924154399172, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "72_akanejima": { latitude: 34.66261331702966, longitude: 138.9470681525203, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "73_noroshizaki": { latitude: 34.6621708470976, longitude: 138.94146867988673, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  nagaiso: { latitude: 34.64485409927357, longitude: 138.91799374628604, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "74_motone": { latitude: 34.64252154653855, longitude: 138.91769486847107, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "75_kagurane": { latitude: 34.64158415200717, longitude: 138.9163332129774, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "76_ongoku": { latitude: 34.631407151077035, longitude: 138.90766167981823, coord_accuracy: "exact", coordinate_note: "ユーザー再確認座標" },
+  "77_aragami_taraisaki": { latitude: 34.62856742719255, longitude: 138.90017626229135, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "78_takaiso_takamizaki": { latitude: 34.62450084764903, longitude: 138.88976346852775, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "79_umanose": { latitude: 34.601874894939705, longitude: 138.84610014891663, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "80_suiheiba": { latitude: 34.601691921431076, longitude: 138.84533396162823, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "81_yunohana": { latitude: 34.60150246320644, longitude: 138.84229939001986, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "82_naraiomote": { latitude: 34.60183364764506, longitude: 138.84131494194511, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "83_tsunohonze": { latitude: 34.603712922850185, longitude: 138.83809507432585, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "86_yoshida_ozone": { latitude: 34.636902553185855, longitude: 138.78949726418423, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "90_kokeshijima_ura": { latitude: 34.666680262689525, longitude: 138.78363252083324, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "94_zappun": { latitude: 34.71512159674666, longitude: 138.74220405903077, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "95_okatonbi": { latitude: 34.72841388427518, longitude: 138.74172547582492, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "96_kurosaki": { latitude: 34.73621197019109, longitude: 138.7498091400067, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "97_hagiyazaki": { latitude: 34.745850774653306, longitude: 138.75487720942178, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "98_murozaki": { latitude: 34.752510999095485, longitude: 138.76490781932355, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "99_ajirozaki": { latitude: 34.771779995331265, longitude: 138.7623452687985, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+  "100_onbi": { latitude: 34.77472702255147, longitude: 138.76746673650615, coord_accuracy: "exact", coordinate_note: "ユーザー確認座標" },
+};
+
+sampleSpots.forEach((spot) => {
+  Object.assign(spot, spotCoordinates[spot.spot_id] || {});
+  spot.base_area = spot.base_area || areaBaseAreaMap[spot.area] || spot.area;
+});
+
 const defaultConditions = {
   waterTemp: 24.5,
   tempTrend: -0.3,
@@ -478,6 +527,18 @@ const app = Vue.createApp({
         "is-candidate": label === "安全寄り",
         "is-hard": label === "要確認",
       };
+    },
+    hasCoordinates(spot) {
+      const latitude = Number(spot?.latitude);
+      const longitude = Number(spot?.longitude);
+      return Number.isFinite(latitude) && Number.isFinite(longitude) && latitude !== 0 && longitude !== 0;
+    },
+    formatCoordinate(value) {
+      return String(value || "");
+    },
+    googleMapUrl(spot) {
+      if (!this.hasCoordinates(spot)) return "";
+      return `https://www.google.com/maps/search/?api=1&query=${spot.latitude},${spot.longitude}`;
     },
     selectSpot(spotId, nextView) {
       this.selectedSpotId = spotId;

@@ -181,7 +181,7 @@
                 <h2>{{ selectedSpot.name }}</h2>
                 <p>{{ selectedSpot.notes || selectedSpot.memo }}</p>
               </div>
-              <a v-if="selectedSpot.google_map_url" class="ghost link" :href="selectedSpot.google_map_url" target="_blank" rel="noreferrer">Map</a>
+              <a v-if="hasCoordinates(selectedSpot)" class="ghost link" :href="googleMapUrl(selectedSpot)" target="_blank" rel="noreferrer">Google Mapsで開く</a>
             </article>
 
             <div class="detail-grid">
@@ -238,6 +238,10 @@
                   <div><dt>シブダイ</dt><dd>{{ selectedSpot.shibudai_score }}/5</dd></div>
                   <div><dt>真鯛</dt><dd>{{ selectedSpot.madai_score }}/5</dd></div>
                   <div><dt>シマアジ</dt><dd>{{ selectedSpot.shimaaji_score }}/5</dd></div>
+                  <div v-if="hasCoordinates(selectedSpot)"><dt>緯度</dt><dd>{{ formatCoordinate(selectedSpot.latitude) }}</dd></div>
+                  <div v-if="hasCoordinates(selectedSpot)"><dt>経度</dt><dd>{{ formatCoordinate(selectedSpot.longitude) }}</dd></div>
+                  <div v-if="selectedSpot.coord_accuracy"><dt>座標精度</dt><dd>{{ selectedSpot.coord_accuracy }}</dd></div>
+                  <div v-if="selectedSpot.coordinate_note"><dt>座標メモ</dt><dd>{{ selectedSpot.coordinate_note }}</dd></div>
                 </dl>
               </article>
             </div>
