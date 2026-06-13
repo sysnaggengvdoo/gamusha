@@ -64,4 +64,5 @@ https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=goldenTime&spot_
 - `routeRisk` は `sea_level_height_msl` を使った簡易判定です。沿岸精度に限界があるため参考値として扱います。
 - 座標列を既存の `spots` シートへ反映する場合は、GASを貼り替えたあと `setupSpotCoordinates` を手動実行してください。`latitude`, `longitude`, `coord_accuracy`, `coordinate_note`, `base_area` がなければ追加し、`spot_id` が一致する既存行だけを更新します。
 - `goldenTime` はOpen-Meteo Marine APIの `sea_level_height_msl`, `ocean_current_velocity`, `ocean_current_direction` とWeather APIの日の入り/日の出、雲量、風速を使った推定です。沿岸地磯では誤差があるため参考値として扱います。
+- `goldenTime` APIは互換用に `getGoldenTime`, `golden`, `gt` でも呼べます。未対応actionは `Unknown action: ...` と `availableActions` を返します。
 - GASを貼り替えたら `testSetupSpotCoordinates`, `testForecast`, `testGoldenTime` を実行し、成功後にWebアプリを新バージョンで再デプロイしてください。

@@ -6,6 +6,19 @@ const SHEETS = {
   settings: 'settings',
 };
 
+const AVAILABLE_GET_ACTIONS = [
+  'getSpots',
+  'getSpot',
+  'getLogs',
+  'scoreAll',
+  'timeline',
+  'forecast',
+  'goldenTime',
+  'getGoldenTime',
+  'golden',
+  'gt',
+];
+
 const BASE_AREAS = {
   '外浦須崎': { latitude: 34.666, longitude: 138.987 },
   '下田田牛': { latitude: 34.642, longitude: 138.918 },
@@ -64,18 +77,22 @@ const SPOT_COORDINATES = [
 
 function doGet(e) {
   try {
-    const action = e.parameter.action;
+    const action = String((e.parameter && e.parameter.action) || '').trim();
     if (action === 'getSpots') return jsonOk(getSpots());
     if (action === 'getSpot') return jsonOk(getSpotById(e.parameter.spot_id));
     if (action === 'getLogs') return jsonOk(getLogs_(e.parameter.spot_id));
     if (action === 'scoreAll') return jsonOk(scoreAll_(getLatestCondition_()));
     if (action === 'timeline') return jsonOk(createTimeline_(e.parameter.spot_id, getLatestCondition_()));
     if (action === 'forecast') return forecastResponse_(e.parameter.date, e.parameter.area);
-    if (action === 'goldenTime') return goldenTimeResponse_(e.parameter.spot_id, e.parameter.date);
-    return jsonError_('Unknown action');
+    if (isGoldenTimeAction_(action)) return goldenTimeResponse_(e.parameter.spot_id, e.parameter.date);
+    return jsonError_('Unknown action: ' + (action || '(empty)'), { availableActions: AVAILABLE_GET_ACTIONS });
   } catch (error) {
     return jsonError_(String(error));
   }
+}
+
+function isGoldenTimeAction_(action) {
+  return ['goldenTime', 'getGoldenTime', 'golden', 'gt'].includes(action);
 }
 
 function getSpots() {
@@ -136,7 +153,7 @@ function doPost(e) {
     if (body.action === 'saveLog') return jsonOk(appendRow_(SHEETS.logs, body.log));
     if (body.action === 'saveCondition') return jsonOk(appendRow_(SHEETS.conditions, body.condition));
     if (body.action === 'scoreAll') return jsonOk(scoreAll_(body.condition));
-    return jsonError_('Unknown action');
+    return jsonError_('Unknown action: ' + (body.action || '(empty)'), { availableActions: ['saveLog', 'saveCondition', 'scoreAll'] });
   } catch (error) {
     return jsonError_(String(error));
   }
@@ -228,12 +245,72 @@ function goldenTimeResponse_(spotId, targetDate) {
   const date = targetDate || Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
   const endDate = nextDate_(date);
   const point = pointForSpot_(spot);
-  const weather = fetchWeatherForecast_(point, date, endDate);
-  const marine = fetchMarineForecast_(point, date, endDate);
-  const result = buildGoldenTime_(spot, date, point, weather, marine);
+  let result;
+  try {
+    const weather = fetchWeatherForecast_(point, date, endDate);
+    const marine = fetchMarineForecast_(point, date, endDate);
+    result = buildGoldenTime_(spot, date, point, weather, marine);
+  } catch (error) {
+    result = buildSimpleGoldenTime_(spot, date, 'Open-Meteo取得失敗: ' + String(error));
+  }
   return ContentService
     .createTextOutput(JSON.stringify({ ok: true, ...result }))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function buildSimpleGoldenTime_(spot, date, errorNote) {
+  const astronomy = {
+    sunset: '18:58',
+    sunrise: '04:32',
+    moon_age: round1_(moonAge_(new Date(date + 'T12:00:00+09:00'))),
+    moonrise: '',
+    moonset: '',
+  };
+  const safetyPenalty = Number(spot.night_safety || 3) <= 1 ? 18 : Number(spot.night_safety || 3) === 2 ? 8 : 0;
+  const firstScore = clamp_(72 + Number(spot.shibudai_score || 3) * 2 - Number(spot.difficulty || 3) - safetyPenalty);
+  const secondScore = clamp_(68 + Number(spot.shibudai_score || 3) - safetyPenalty);
+  const windows = [
+    {
+      start: '19:00',
+      end: '21:00',
+      score: firstScore,
+      label: '夕まずめ〜夜序盤',
+      reasons: ['日没後の暗さ', '夜釣り向き時間帯'],
+    },
+    {
+      start: '03:30',
+      end: '04:30',
+      score: secondScore,
+      label: '夜明け前',
+      reasons: ['朝まずめ前の回遊期待'],
+    },
+  ];
+  const notice = '潮位・潮流は推定参考値です。現地判断を優先してください。' + (errorNote ? ' ' + errorNote : '');
+  return {
+    spot_id: spot.spot_id,
+    spot_name: spot.name,
+    date,
+    source: 'simple_estimate',
+    notice,
+    astronomy,
+    golden_times: windows,
+    golden_time: {
+      windows,
+      astronomy,
+      notice,
+    },
+    hourly: windows.map((window) => ({
+      time: window.start,
+      golden_score: window.score,
+      tide_movement_score: 60,
+      tide_size_score: 55,
+      current_score: 55,
+      darkness_score: 82,
+      moon_score: 65,
+      sun_score: 78,
+      sea_safety_score: 70,
+    })),
+  };
 }
 
 function buildGoldenTime_(spot, date, point, weather, marine) {
@@ -309,13 +386,23 @@ function buildGoldenTime_(spot, date, point, weather, marine) {
     })
     .filter(Boolean);
 
+  const goldenWindows = buildGoldenWindows_(hourly);
+  const astronomy = astronomySummary_(hourly, sunTimes);
+  const notice = '潮位・潮流はOpen-Meteo Marine APIの推定参考値です。沿岸地磯では誤差があるため現地判断を優先してください。';
+
   return {
     spot_id: spot.spot_id,
+    spot_name: spot.name,
     date,
     source: 'open_meteo_estimate',
-    notice: '潮位・潮流はOpen-Meteo Marine APIの推定参考値です。沿岸地磯では誤差があるため現地判断を優先してください。',
-    astronomy: astronomySummary_(hourly, sunTimes),
-    golden_times: buildGoldenWindows_(hourly),
+    notice,
+    astronomy,
+    golden_times: goldenWindows,
+    golden_time: {
+      windows: goldenWindows,
+      astronomy,
+      notice,
+    },
     hourly,
   };
 }
@@ -892,8 +979,10 @@ function jsonOk(data) {
   return ContentService.createTextOutput(JSON.stringify({ ok: true, data, error: null })).setMimeType(ContentService.MimeType.JSON);
 }
 
-function jsonError_(message) {
-  return ContentService.createTextOutput(JSON.stringify({ ok: false, data: null, error: message })).setMimeType(ContentService.MimeType.JSON);
+function jsonError_(message, extra) {
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: false, data: null, error: message, ...(extra || {}) }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function clamp_(value) {

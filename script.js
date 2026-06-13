@@ -371,6 +371,28 @@ function goldenTimeLabel(goldenTime) {
   return best ? `GT ${best.start}〜${best.end}` : "GT 推定中";
 }
 
+function normalizeGoldenTimePayload(payload, spot, date) {
+  const windows = payload?.golden_times || payload?.golden_time?.windows || [];
+  const astronomy = payload?.astronomy || payload?.golden_time?.astronomy || {};
+  const notice = payload?.notice || payload?.golden_time?.notice || "潮位・潮流は推定参考値です。現地判断を優先してください。";
+  return {
+    ...payload,
+    spot_id: payload?.spot_id || spot?.spot_id || "",
+    spot_name: payload?.spot_name || spot?.name || "",
+    date: payload?.date || date,
+    source: payload?.source || "gas",
+    notice,
+    astronomy,
+    golden_times: windows,
+    golden_time: {
+      ...(payload?.golden_time || {}),
+      windows,
+      astronomy,
+      notice,
+    },
+  };
+}
+
 function createFallbackGoldenTime(spot, date, conditions) {
   const nightSafety = Number(spot.night_safety || 3);
   const difficulty = Number(spot.difficulty || 3);
@@ -410,6 +432,32 @@ function createFallbackGoldenTime(spot, date, conditions) {
         reasons: ["深夜の暗さを評価", "朝まずめ前の差し込み候補"],
       },
     ],
+    golden_time: {
+      windows: [
+        {
+          start: "20:30",
+          end: "22:00",
+          score: firstScore,
+          label: firstScore >= 80 ? "本命集中" : "第一候補",
+          reasons: ["日没後の暗い時間帯", "手入力の潮条件を優先", "波風の手入力条件を反映"],
+        },
+        {
+          start: "02:00",
+          end: "03:00",
+          score: secondScore,
+          label: secondScore >= 75 ? "継続価値あり" : "調査候補",
+          reasons: ["深夜の暗さを評価", "朝まずめ前の差し込み候補"],
+        },
+      ],
+      astronomy: {
+        sunset: "推定中",
+        sunrise: "推定中",
+        moon_age: "",
+        moonrise: "",
+        moonset: "",
+      },
+      notice: "GAS未取得時の簡易推定です。潮位・潮流は参考値として扱ってください。",
+    },
     hourly: ["19:00", "20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00", "03:00", "04:00"].map((time, index) => ({
       time,
       golden_score: clamp(baseScore + (index >= 2 && index <= 3 ? 8 : index >= 7 && index <= 8 ? 4 : -6)),
@@ -451,7 +499,10 @@ async function gasGet(action, params = {}) {
   });
   const response = await fetch(url.toString());
   const payload = await response.json();
-  if (!payload.ok) throw new Error(payload.error || "GAS API error");
+  if (!payload.ok) {
+    const available = Array.isArray(payload.availableActions) ? ` / available: ${payload.availableActions.join(", ")}` : "";
+    throw new Error(`${payload.error || "GAS API error"}${available}`);
+  }
   return payload.data ?? payload;
 }
 
@@ -627,12 +678,15 @@ const app = Vue.createApp({
       let okCount = 0;
       const errors = [];
       results.forEach((result, index) => {
-        if (result.status === "fulfilled" && result.value?.golden_times) {
-          next[targets[index].spot_id] = { ...result.value, source: "gas" };
+        const normalized = result.status === "fulfilled"
+          ? normalizeGoldenTimePayload(result.value, targets[index], this.selectedDate)
+          : null;
+        if (normalized?.golden_times?.length) {
+          next[targets[index].spot_id] = normalized;
           okCount++;
         } else {
           const spotName = targets[index]?.name || targets[index]?.spot_id || "不明";
-          const message = result.status === "rejected" ? result.reason?.message : "GAS応答にgolden_timesがありません";
+          const message = result.status === "rejected" ? result.reason?.message : "GAS応答にgolden_times / golden_time.windows がありません";
           errors.push(`${spotName}: ${message || "不明なエラー"}`);
         }
       });
