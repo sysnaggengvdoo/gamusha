@@ -242,7 +242,7 @@ function reasonItem(label, text, value = "") {
   return { label, text, value };
 }
 
-function buildReasonGroups(parts, safety, spot, conditions, goldenTime) {
+function buildReasonGroups(parts, safety, spot, conditions, goldenTime, catchBoost) {
   const positives = [];
   const negatives = [];
   const safetyReasons = safety.reasons.map((text) => reasonItem("安全", text, safety.blocked ? "停止" : "注意"));
@@ -272,6 +272,10 @@ function buildReasonGroups(parts, safety, spot, conditions, goldenTime) {
     positives.push(reasonItem("GT", `${bestGolden.start}〜${bestGolden.end} は ${bestGolden.label}。潮・暗さ・月条件の重なりを加点しています。`, `+${parts.goldenTimeBonus}`));
   }
 
+  if (parts.catchHistoryBonus > 0 && catchBoost?.reasons?.length) {
+    positives.push(reasonItem("釣果実績", catchBoost.reasons.join(" / "), `+${parts.catchHistoryBonus}`));
+  }
+
   if (safetyReasons.length === 0) {
     safetyReasons.push(reasonItem("安全", "安全ゲートは通過。現地で波周期、足場、退路を再確認。", "通過"));
   }
@@ -283,7 +287,7 @@ function buildReasonGroups(parts, safety, spot, conditions, goldenTime) {
   };
 }
 
-function createResult(spot, conditions, logs, goldenTime = null) {
+function createResult(spot, conditions, logs, goldenTime = null, catchBoost = null) {
   const water = scoreWaterTemp(conditions.waterTemp, conditions.tempTrend);
   const tide = scoreTide(conditions.tide, spot);
   const sea = scoreSea(conditions, spot);
@@ -293,6 +297,7 @@ function createResult(spot, conditions, logs, goldenTime = null) {
   const safety = safetyGate(conditions, spot);
   const confidencePenalty = logs.some((log) => log.spot_id === spot.spot_id) ? 0 : 4;
   const gtBonus = goldenTimeBonus(goldenTime);
+  const catchHistoryBonus = Number(catchBoost?.enabled ? catchBoost.bonus : 0);
 
   const raw =
     water * 0.2 +
@@ -303,12 +308,13 @@ function createResult(spot, conditions, logs, goldenTime = null) {
     past * 0.15 -
     safety.penalty -
     confidencePenalty +
-    gtBonus;
+    gtBonus +
+    catchHistoryBonus;
 
   const score = safety.blocked ? 0 : clamp(raw);
   const judge = judgeScore(score, safety.blocked);
-  const parts = { water, tide, sea, moon, spot: spotScore, past, dangerPenalty: safety.penalty, confidencePenalty, goldenTimeBonus: gtBonus };
-  const reasonGroups = buildReasonGroups(parts, safety, spot, conditions, goldenTime);
+  const parts = { water, tide, sea, moon, spot: spotScore, past, dangerPenalty: safety.penalty, confidencePenalty, goldenTimeBonus: gtBonus, catchHistoryBonus };
+  const reasonGroups = buildReasonGroups(parts, safety, spot, conditions, goldenTime, catchBoost);
   const reasons = [
     `水温 ${water}/100、潮 ${tide}/100、風波 ${sea}/100、月 ${moon}/100。`,
     `地形適性 ${spotScore}/100、過去ログ補正 ${past}/100。`,
@@ -328,6 +334,7 @@ function createResult(spot, conditions, logs, goldenTime = null) {
     reasons,
     reasonGroups,
     goldenTime,
+    catchBoost,
   };
 }
 
@@ -518,6 +525,201 @@ async function gasPost(body) {
   return payload.data ?? payload;
 }
 
+const companionFishPattern = /イサキ|メイチダイ|マダイ|真鯛|ハタンポ|シマアジ/;
+
+function normalizeCatchRecord(record = {}) {
+  const date = String(record.date || "");
+  return {
+    date,
+    year: Number(record.year || date.slice(0, 4)) || "",
+    month: Number(record.month || date.slice(5, 7)) || "",
+    repo_id: String(record.repo_id || ""),
+    report_url: String(record.report_url || ""),
+    list_location: String(record.list_location || ""),
+    detected_point: String(record.detected_point || ""),
+    fish_raw: String(record.fish_raw || ""),
+    fish_normalized: String(record.fish_normalized || ""),
+    size_cm: record.size_cm || "",
+    weight_kg: record.weight_kg || "",
+    method: String(record.method || ""),
+    is_night_fishing: record.is_night_fishing === true || record.is_night_fishing === "true" || record.is_night_fishing === "TRUE",
+    evidence_text: String(record.evidence_text || "").slice(0, 120),
+    confidence: String(record.confidence || record.alias_confidence || ""),
+    spot_id: String(record.spot_id || ""),
+    candidate_spot_id: String(record.candidate_spot_id || ""),
+    app_spot_name: String(record.app_spot_name || ""),
+    alias_confidence: String(record.alias_confidence || ""),
+  };
+}
+
+function normalizeSummaryRow(row = {}) {
+  const urls = Array.isArray(row.report_urls)
+    ? row.report_urls
+    : String(row.report_urls || "").split(/[\s,、]+/);
+  return {
+    point: String(row.point || ""),
+    month: Number(row.month || 0),
+    fish_normalized: String(row.fish_normalized || ""),
+    count: Number(row.count || 0),
+    report_urls: urls.map((url) => String(url).trim()).filter(Boolean),
+  };
+}
+
+function isShibudaiFishName(value) {
+  return /シブダイ|フエダイ/.test(String(value || "")) || String(value || "") === "シブダイ系";
+}
+
+function isShibudaiRecord(record) {
+  return isShibudaiFishName(record.fish_normalized) || isShibudaiFishName(record.fish_raw) || isShibudaiFishName(record.evidence_text);
+}
+
+function recordMonth(record) {
+  return Number(record.month || String(record.date || "").slice(5, 7)) || 0;
+}
+
+function compactText(value) {
+  return String(value || "").replace(/\s+/g, "").trim();
+}
+
+function recordMatchesSpot(record, spot) {
+  if (!record || !spot) return false;
+  const ids = [record.spot_id, record.candidate_spot_id].filter(Boolean);
+  if (ids.includes(spot.spot_id)) return true;
+  const spotName = compactText(spot.name);
+  const points = [record.detected_point, record.app_spot_name, record.list_location].map(compactText).filter(Boolean);
+  return points.some((point) => point === spotName || (spotName.length >= 2 && point.includes(spotName)));
+}
+
+function recordsForSpot(records, spot) {
+  return (records || []).filter((record) => recordMatchesSpot(record, spot));
+}
+
+function incrementCount(map, key, amount = 1) {
+  if (!key) return;
+  map.set(key, (map.get(key) || 0) + Number(amount || 1));
+}
+
+function sortedCountEntries(map, limit = 10) {
+  return [...map.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || String(a.label).localeCompare(String(b.label), "ja"))
+    .slice(0, limit);
+}
+
+function uniqueReportRecords(records, limit = 12) {
+  const seen = new Set();
+  return (records || [])
+    .filter((record) => record.report_url)
+    .filter((record) => {
+      const key = record.report_url;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
+    .slice(0, limit);
+}
+
+function summarizeCatchRecords(records) {
+  const shibudaiMonths = new Map();
+  const companions = new Map();
+  const methods = new Map();
+  (records || []).forEach((record) => {
+    if (isShibudaiRecord(record)) incrementCount(shibudaiMonths, `${recordMonth(record)}月`);
+    else incrementCount(companions, record.fish_normalized || record.fish_raw || "魚種未抽出");
+    incrementCount(methods, record.method || "釣法未抽出");
+  });
+  return {
+    shibudaiMonths: sortedCountEntries(shibudaiMonths),
+    companions: sortedCountEntries(companions),
+    methods: sortedCountEntries(methods),
+    reports: uniqueReportRecords(records),
+  };
+}
+
+function buildMonthlyShibudaiStats(records, summary) {
+  const counts = new Map();
+  (summary || []).filter((row) => isShibudaiFishName(row.fish_normalized)).forEach((row) => incrementCount(counts, `${row.month}月`, row.count));
+  if (counts.size === 0) (records || []).filter(isShibudaiRecord).forEach((record) => incrementCount(counts, `${recordMonth(record)}月`));
+  return sortedCountEntries(counts, 12);
+}
+
+function buildPointShibudaiStats(records, summary) {
+  const counts = new Map();
+  (summary || []).filter((row) => isShibudaiFishName(row.fish_normalized)).forEach((row) => incrementCount(counts, row.point || "地点未抽出", row.count));
+  if (counts.size === 0) {
+    (records || []).filter(isShibudaiRecord).forEach((record) => incrementCount(counts, record.detected_point || record.list_location || "地点未抽出"));
+  }
+  return sortedCountEntries(counts, 12);
+}
+
+function buildCompanionFishStats(records, summary) {
+  const counts = new Map();
+  (summary || []).filter((row) => !isShibudaiFishName(row.fish_normalized)).forEach((row) => incrementCount(counts, row.fish_normalized || "魚種未抽出", row.count));
+  if (counts.size === 0) {
+    (records || []).filter((record) => !isShibudaiRecord(record)).forEach((record) => incrementCount(counts, record.fish_normalized || record.fish_raw || "魚種未抽出"));
+  }
+  return sortedCountEntries(counts, 12);
+}
+
+function buildMethodStats(records) {
+  const counts = new Map();
+  (records || []).forEach((record) => incrementCount(counts, record.method || "釣法未抽出"));
+  return sortedCountEntries(counts, 10);
+}
+
+function spotForCatchRecord(record, spots) {
+  const id = record.spot_id || record.candidate_spot_id;
+  return (spots || []).find((spot) => spot.spot_id === id) || null;
+}
+
+function sameBaseArea(a, b) {
+  return a && b && ((a.base_area && a.base_area === b.base_area) || a.area === b.area);
+}
+
+function buildCatchHistoryBoost(spot, selectedDate, allRecords, shibudaiRecords, spots, enabled) {
+  const month = Number(String(selectedDate || "").slice(5, 7)) || new Date().getMonth() + 1;
+  const shibudaiForSpot = (shibudaiRecords || []).filter((record) => recordMatchesSpot(record, spot));
+  const sameMonth = shibudaiForSpot.some((record) => recordMonth(record) === month);
+  const otherMonth = shibudaiForSpot.length > 0 && !sameMonth;
+  const sameAreaMonth = (shibudaiRecords || []).some((record) => {
+    if (recordMonth(record) !== month || recordMatchesSpot(record, spot)) return false;
+    return sameBaseArea(spotForCatchRecord(record, spots), spot);
+  });
+  const companionHits = recordsForSpot(allRecords, spot).filter((record) => !isShibudaiRecord(record) && companionFishPattern.test(record.fish_normalized || record.fish_raw));
+  const confidenceRecords = [...shibudaiForSpot, ...companionHits];
+  const lowOnly = confidenceRecords.length > 0 && confidenceRecords.every((record) => String(record.confidence || record.alias_confidence || "").toLowerCase() === "low");
+
+  let bonus = 0;
+  const reasons = [];
+  if (sameMonth) {
+    bonus += 10;
+    reasons.push("同じ磯・同じ月にシブダイ系実績");
+  } else if (otherMonth) {
+    bonus += 6;
+    reasons.push("同じ磯にシブダイ系実績");
+  }
+  if (sameAreaMonth) {
+    bonus += 4;
+    reasons.push("同じエリア・同じ月にシブダイ系実績");
+  }
+  if (companionHits.length > 0) {
+    bonus += 3;
+    reasons.push("イサキ・メイチダイ・マダイなど同伴魚実績");
+  }
+  if (lowOnly && bonus > 0) {
+    bonus = Math.ceil(bonus / 2);
+    reasons.push("低信頼度のため補正を半分扱い");
+  }
+
+  return {
+    enabled,
+    bonus: clamp(bonus, 0, 18),
+    reasons,
+    confidence: lowOnly ? "low" : bonus > 0 ? "medium" : "",
+  };
+}
+
 const app = Vue.createApp({
   data() {
     const today = formatDateValue(new Date());
@@ -526,6 +728,7 @@ const app = Vue.createApp({
         { id: "spots", label: "一覧" },
         { id: "detail", label: "詳細" },
         { id: "timeline", label: "時合い" },
+        { id: "catch", label: "釣果分析" },
         { id: "log", label: "ログ" },
         { id: "design", label: "設計" },
       ],
@@ -537,6 +740,13 @@ const app = Vue.createApp({
       goldenLoading: false,
       goldenStatus: "GTは推定表示中",
       goldenTimesBySpot: {},
+      catchLoading: false,
+      catchStatus: "釣果分析データは未読み込み",
+      catchSummary: [],
+      catchRecords: [],
+      shibudaiHistory: [],
+      catchRecordsBySpot: {},
+      catchBoostEnabled: false,
       selectedDate: today,
       dateOptions: createDateOptions(),
       baseArea: "田牛",
@@ -564,11 +774,16 @@ const app = Vue.createApp({
   },
   async mounted() {
     await this.loadFromGas();
+    await this.loadCatchAnalysis();
     this.refreshLocalGoldenTimes();
+    await this.loadCatchBySpot(this.selectedSpotId);
   },
   watch: {
     selectedDate() {
       this.refreshLocalGoldenTimes();
+    },
+    selectedSpotId(spotId) {
+      this.loadCatchBySpot(spotId);
     },
     conditions: {
       handler() {
@@ -601,6 +816,27 @@ const app = Vue.createApp({
     selectedGoldenTime() {
       return this.goldenTimeData(this.selectedSpot);
     },
+    selectedCatchRecords() {
+      return this.catchRecordsBySpot[this.selectedSpotId]?.records || recordsForSpot(this.catchRecords, this.selectedSpot);
+    },
+    selectedCatchSummary() {
+      return summarizeCatchRecords(this.selectedCatchRecords);
+    },
+    monthlyShibudaiStats() {
+      return buildMonthlyShibudaiStats(this.shibudaiHistory, this.catchSummary);
+    },
+    pointShibudaiStats() {
+      return buildPointShibudaiStats(this.shibudaiHistory, this.catchSummary);
+    },
+    companionFishStats() {
+      return buildCompanionFishStats(this.catchRecords, this.catchSummary);
+    },
+    methodStats() {
+      return buildMethodStats(this.catchRecords);
+    },
+    relatedReportRecords() {
+      return uniqueReportRecords(this.shibudaiHistory.length ? this.shibudaiHistory : this.catchRecords, 18);
+    },
     timeline() {
       return createTimeline(this.selectedResult.score, this.selectedResult.judge === "出撃不可");
     },
@@ -622,6 +858,46 @@ const app = Vue.createApp({
         this.apiStatus = "GAS APIからスプレッドシートDBを読み込み済み";
       } catch (error) {
         this.apiStatus = `GAS API読み込み失敗。ローカルサンプルで表示中: ${error.message}`;
+      }
+    },
+    async loadCatchAnalysis() {
+      if (!GAS_API_URL) {
+        this.catchStatus = "GAS API URL未設定。CSV取込後のスプレッドシート連携で表示します。";
+        return;
+      }
+      this.catchLoading = true;
+      this.catchStatus = "釣果分析データを読み込み中";
+      try {
+        const [summaryPayload, historyPayload] = await Promise.all([gasGet("catchSummary"), gasGet("shibudaiHistory")]);
+        this.catchSummary = (summaryPayload?.summary || []).map(normalizeSummaryRow);
+        this.catchRecords = (summaryPayload?.records || []).map(normalizeCatchRecord);
+        this.shibudaiHistory = (historyPayload?.records || summaryPayload?.shibudai_records || []).map(normalizeCatchRecord);
+        this.catchStatus = `釣果分析を読み込み済み。実績 ${this.catchRecords.length}件 / シブダイ候補 ${this.shibudaiHistory.length}件`;
+      } catch (error) {
+        this.catchStatus = `釣果分析API未反映または読込失敗: ${error.message}`;
+      } finally {
+        this.catchLoading = false;
+      }
+    },
+    async loadCatchBySpot(spotId) {
+      if (!GAS_API_URL || !spotId) return;
+      if (this.catchRecordsBySpot[spotId]?.loaded) return;
+      try {
+        const payload = await gasGet("catchBySpot", { spot_id: spotId });
+        this.catchRecordsBySpot = {
+          ...this.catchRecordsBySpot,
+          [spotId]: {
+            loaded: true,
+            records: (payload?.records || []).map(normalizeCatchRecord),
+            error: "",
+          },
+        };
+      } catch (error) {
+        const fallbackSpot = this.spots.find((spot) => spot.spot_id === spotId) || this.selectedSpot;
+        this.catchRecordsBySpot = {
+          ...this.catchRecordsBySpot,
+          [spotId]: { loaded: true, records: recordsForSpot(this.catchRecords, fallbackSpot), error: error.message },
+        };
       }
     },
     async fetchAutoConditions() {
@@ -653,7 +929,10 @@ const app = Vue.createApp({
       }
     },
     scoreSpot(spot) {
-      return createResult(spot, this.conditions, this.logs, this.goldenTimeData(spot));
+      return createResult(spot, this.conditions, this.logs, this.goldenTimeData(spot), this.catchBoostForSpot(spot));
+    },
+    catchBoostForSpot(spot) {
+      return buildCatchHistoryBoost(spot, this.selectedDate, this.catchRecords, this.shibudaiHistory, this.spots, this.catchBoostEnabled);
     },
     refreshLocalGoldenTimes() {
       const next = {};
@@ -743,12 +1022,31 @@ const app = Vue.createApp({
       this.selectedSpotId = spotId;
       this.logForm.spot_id = spotId;
       this.view = nextView;
+      this.loadCatchBySpot(spotId);
     },
     resetConditions() {
       this.conditions = { ...defaultConditions };
     },
     spotName(spotId) {
       return this.spots.find((spot) => spot.spot_id === spotId)?.name || spotId;
+    },
+    confidenceClass(confidence) {
+      const value = String(confidence || "").toLowerCase();
+      return {
+        "is-candidate": value === "high",
+        "is-conditional": value === "medium",
+        "is-hard": value === "low" || !value,
+      };
+    },
+    confidenceLabel(confidence) {
+      const value = String(confidence || "").toLowerCase();
+      if (value === "high") return "high";
+      if (value === "medium") return "medium";
+      if (value === "low") return "low";
+      return "未評価";
+    },
+    catchFishText(record) {
+      return [record.fish_raw || record.fish_normalized, record.size_cm ? `${record.size_cm}cm` : "", record.weight_kg ? `${record.weight_kg}kg` : ""].filter(Boolean).join(" / ");
     },
     async saveLog() {
       const log = { ...this.logForm, log_id: `log-${Date.now()}` };

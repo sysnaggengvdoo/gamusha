@@ -4,6 +4,12 @@ const SHEETS = {
   conditions: 'conditions',
   scoreResults: 'score_results',
   settings: 'settings',
+  reportIndex: 'report_index',
+  reportDetails: 'report_details',
+  catchRecords: 'catch_records',
+  shibudaiCandidates: 'shibudai_candidates',
+  pointMonthSummary: 'point_month_summary',
+  pointAliases: 'point_aliases',
 };
 
 const AVAILABLE_GET_ACTIONS = [
@@ -17,6 +23,33 @@ const AVAILABLE_GET_ACTIONS = [
   'getGoldenTime',
   'golden',
   'gt',
+  'catchSummary',
+  'catchBySpot',
+  'shibudaiHistory',
+];
+
+const PORTSIDE_SHEET_HEADERS = {
+  report_index: ['year', 'date_raw', 'date', 'list_location', 'list_fish_text', 'report_url', 'repo_id'],
+  report_details: ['repo_id', 'report_url', 'title', 'detail_text', 'detected_points', 'detected_methods', 'detected_conditions', 'evidence_text', 'fetch_status', 'error_message'],
+  catch_records: ['date', 'year', 'month', 'repo_id', 'report_url', 'list_location', 'detected_point', 'fish_raw', 'fish_normalized', 'size_cm', 'weight_kg', 'method', 'is_night_fishing', 'evidence_text', 'confidence'],
+  shibudai_candidates: ['date', 'year', 'month', 'repo_id', 'report_url', 'list_location', 'detected_point', 'fish_raw', 'fish_normalized', 'size_cm', 'weight_kg', 'method', 'is_night_fishing', 'evidence_text', 'confidence'],
+  point_month_summary: ['point', 'month', 'fish_normalized', 'count', 'report_urls'],
+  point_aliases: ['spot_id', 'app_spot_name', 'alias', 'confidence', 'memo'],
+};
+
+const PORTSIDE_DEFAULT_ALIASES = [
+  { spot_id: '62_takanba', app_spot_name: '高ん場', alias: '高ん場', confidence: 'high', memo: 'アプリ釣り場名と同一' },
+  { spot_id: '74_motone', app_spot_name: '元根', alias: '元根', confidence: 'high', memo: 'アプリ釣り場名と同一' },
+  { spot_id: '75_kagurane', app_spot_name: 'カグラ根', alias: 'カグラ根', confidence: 'high', memo: 'アプリ釣り場名と同一' },
+  { spot_id: '75_kagurane', app_spot_name: 'カグラ根', alias: '神楽根', confidence: 'high', memo: '本文表記ゆれ' },
+  { spot_id: '76_ongoku', app_spot_name: '遠国', alias: '遠国', confidence: 'high', memo: 'アプリ釣り場名と同一' },
+  { spot_id: '76_ongoku', app_spot_name: '遠国', alias: '田牛周辺', confidence: 'low', memo: '広域表記のため断定しない' },
+  { spot_id: '77_aragami_taraisaki', app_spot_name: '荒神 タライ岬', alias: '荒神', confidence: 'medium', memo: '周辺表記の可能性あり' },
+  { spot_id: '77_aragami_taraisaki', app_spot_name: '荒神 タライ岬', alias: 'タライ岬', confidence: 'medium', memo: '周辺表記の可能性あり' },
+  { spot_id: '80_suiheiba', app_spot_name: '水平場 裏水平場', alias: '水平場', confidence: 'high', memo: 'アプリ釣り場名の短縮' },
+  { spot_id: '86_yoshida_ozone', app_spot_name: '吉田大根', alias: '吉田大根', confidence: 'high', memo: 'アプリ釣り場名と同一' },
+  { spot_id: '95_okatonbi', app_spot_name: '陸トンビ', alias: '陸トンビ', confidence: 'high', memo: 'アプリ釣り場名と同一' },
+  { spot_id: '96_kurosaki', app_spot_name: '黒崎', alias: '黒崎', confidence: 'high', memo: 'アプリ釣り場名と同一' },
 ];
 
 const BASE_AREAS = {
@@ -85,6 +118,9 @@ function doGet(e) {
     if (action === 'timeline') return jsonOk(createTimeline_(e.parameter.spot_id, getLatestCondition_()));
     if (action === 'forecast') return forecastResponse_(e.parameter.date, e.parameter.area);
     if (isGoldenTimeAction_(action)) return goldenTimeResponse_(e.parameter.spot_id, e.parameter.date);
+    if (action === 'catchSummary') return jsonPayload_({ ok: true, ...catchSummary_() });
+    if (action === 'catchBySpot') return jsonPayload_({ ok: true, ...catchBySpot_(e.parameter.spot_id) });
+    if (action === 'shibudaiHistory') return jsonPayload_({ ok: true, ...shibudaiHistory_() });
     return jsonError_('Unknown action: ' + (action || '(empty)'), { availableActions: AVAILABLE_GET_ACTIONS });
   } catch (error) {
     return jsonError_(String(error));
@@ -101,6 +137,245 @@ function getSpots() {
 
 function getSpotById(spot_id) {
   return getSpots().find((spot) => spot.spot_id === spot_id) || null;
+}
+
+function setupPortsideSheets() {
+  const ss = SpreadsheetApp.getActive();
+  const created = [];
+  const updated = [];
+  Object.keys(PORTSIDE_SHEET_HEADERS).forEach((sheetName) => {
+    const result = ensureSheetHeaders_(ss, sheetName, PORTSIDE_SHEET_HEADERS[sheetName]);
+    if (result.created) created.push(sheetName);
+    if (result.addedHeaders.length > 0) updated.push({ sheetName, addedHeaders: result.addedHeaders });
+  });
+  const aliasSeeded = seedPointAliases_(ss);
+  const result = { created, updated, aliasSeeded };
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+function catchSummary_() {
+  const summary = getRowsSafe_(SHEETS.pointMonthSummary).map(normalizePointMonthSummary_);
+  const aliases = getAllPointAliases_();
+  const records = getRowsSafe_(SHEETS.catchRecords).map(normalizeCatchRecord_).map((record) => enrichRecordWithAlias_(record, aliases));
+  return {
+    summary,
+    records,
+    shibudai_records: shibudaiHistoryRecords_(aliases),
+    generated_at: Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm:ss'),
+  };
+}
+
+function catchBySpot_(spotId) {
+  const spot = getSpotById(spotId);
+  const aliases = getPointAliasesForSpot_(spotId, spot);
+  const records = getRowsSafe_(SHEETS.catchRecords)
+    .map(normalizeCatchRecord_)
+    .map((record) => {
+      const match = findAliasMatchForRecord_(record, aliases);
+      if (!match) return null;
+      return {
+        ...record,
+        spot_id: spotId,
+        spot_name: spot ? spot.name : match.app_spot_name,
+        alias: match.alias,
+        alias_confidence: match.confidence,
+        confidence: combineConfidence_(record.confidence, match.confidence),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+  return {
+    spot_id: spotId || '',
+    spot_name: spot ? spot.name : '',
+    records,
+  };
+}
+
+function shibudaiHistory_() {
+  return { records: shibudaiHistoryRecords_() };
+}
+
+function shibudaiHistoryRecords_(aliases) {
+  const candidateRows = getRowsSafe_(SHEETS.shibudaiCandidates);
+  const sourceRows = candidateRows.length > 0
+    ? candidateRows
+    : getRowsSafe_(SHEETS.catchRecords).filter(isShibudaiCandidateRow_);
+  const aliasRows = aliases || getAllPointAliases_();
+  return sourceRows
+    .map(normalizeCatchRecord_)
+    .map((record) => enrichRecordWithAlias_(record, aliasRows))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+}
+
+function ensureSheetHeaders_(ss, sheetName, headers) {
+  let sheet = ss.getSheetByName(sheetName);
+  const created = !sheet;
+  if (!sheet) sheet = ss.insertSheet(sheetName);
+  if (sheet.getLastRow() === 0 || sheet.getLastColumn() === 0) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    return { created, addedHeaders: headers };
+  }
+
+  let existingHeaders = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(String);
+  const missing = headers.filter((header) => !existingHeaders.includes(header));
+  if (missing.length > 0) {
+    sheet.getRange(1, existingHeaders.length + 1, 1, missing.length).setValues([missing]);
+    existingHeaders = existingHeaders.concat(missing);
+  }
+  return { created, addedHeaders: missing };
+}
+
+function seedPointAliases_(ss) {
+  const sheet = ss.getSheetByName(SHEETS.pointAliases);
+  if (!sheet) return 0;
+  if (sheet.getLastRow() > 1) return 0;
+  const headers = PORTSIDE_SHEET_HEADERS.point_aliases;
+  const values = PORTSIDE_DEFAULT_ALIASES.map((alias) => headers.map((header) => alias[header] || ''));
+  if (values.length > 0) sheet.getRange(2, 1, values.length, headers.length).setValues(values);
+  return values.length;
+}
+
+function getPointAliasesForSpot_(spotId, spot) {
+  const aliases = getAllPointAliases_()
+    .filter((row) => String(row.spot_id || '') === String(spotId || ''))
+    .filter((row) => row.alias);
+  if (spot && spot.name && !aliases.some((row) => normalizeText_(row.alias) === normalizeText_(spot.name))) {
+    aliases.push({
+      spot_id: spot.spot_id,
+      app_spot_name: spot.name,
+      alias: spot.name,
+      confidence: 'high',
+      memo: '釣り場名による自動マッチ',
+    });
+  }
+  return aliases;
+}
+
+function getAllPointAliases_() {
+  return getRowsSafe_(SHEETS.pointAliases).map(normalizePointAlias_).filter((row) => row.alias);
+}
+
+function enrichRecordWithAlias_(record, aliases) {
+  const aliasRows = aliases || getAllPointAliases_();
+  const match = findAliasMatchForRecord_(record, aliasRows);
+  if (!match) return record;
+  return {
+    ...record,
+    spot_id: match.confidence === 'low' ? '' : match.spot_id,
+    candidate_spot_id: match.spot_id,
+    app_spot_name: match.app_spot_name,
+    alias: match.alias,
+    alias_confidence: match.confidence,
+    confidence: combineConfidence_(record.confidence, match.confidence),
+  };
+}
+
+function findAliasMatchForRecord_(record, aliases) {
+  const haystacks = [record.detected_point, record.list_location]
+    .map(normalizeText_)
+    .filter(Boolean);
+  const rankedAliases = aliases
+    .filter((alias) => alias.alias)
+    .sort((a, b) => confidenceWeight_(b.confidence) - confidenceWeight_(a.confidence));
+  for (const alias of rankedAliases) {
+    const needle = normalizeText_(alias.alias);
+    if (!needle) continue;
+    if (haystacks.some((text) => text === needle || (needle.length >= 2 && text.includes(needle)))) return alias;
+  }
+  return null;
+}
+
+function normalizeCatchRecord_(row) {
+  const date = formatDateCell_(row.date);
+  return {
+    date,
+    year: Number(row.year || (date ? String(date).slice(0, 4) : '')) || '',
+    month: Number(row.month || (date ? String(date).slice(5, 7) : '')) || '',
+    repo_id: String(row.repo_id || ''),
+    report_url: String(row.report_url || ''),
+    list_location: String(row.list_location || ''),
+    detected_point: String(row.detected_point || ''),
+    fish_raw: String(row.fish_raw || ''),
+    fish_normalized: String(row.fish_normalized || ''),
+    size_cm: row.size_cm || '',
+    weight_kg: row.weight_kg || '',
+    method: String(row.method || ''),
+    is_night_fishing: toBool_(row.is_night_fishing),
+    evidence_text: truncateText_(row.evidence_text || '', 120),
+    confidence: String(row.confidence || ''),
+  };
+}
+
+function normalizePointMonthSummary_(row) {
+  return {
+    point: String(row.point || ''),
+    month: Number(row.month || 0),
+    fish_normalized: String(row.fish_normalized || ''),
+    count: Number(row.count || 0),
+    report_urls: splitUrls_(row.report_urls),
+  };
+}
+
+function normalizePointAlias_(row) {
+  return {
+    spot_id: String(row.spot_id || ''),
+    app_spot_name: String(row.app_spot_name || ''),
+    alias: String(row.alias || ''),
+    confidence: String(row.confidence || 'medium').toLowerCase(),
+    memo: String(row.memo || ''),
+  };
+}
+
+function isShibudaiCandidateRow_(row) {
+  const text = [
+    row.fish_normalized,
+    row.fish_raw,
+    row.evidence_text,
+    row.list_fish_text,
+    row.detail_text,
+  ].map((value) => String(value || '')).join(' ');
+  return /シブダイ|フエダイ/.test(text) || String(row.fish_normalized || '') === 'シブダイ系';
+}
+
+function splitUrls_(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).map(String);
+  return String(value || '')
+    .split(/[\s,、]+/)
+    .map((url) => url.trim())
+    .filter(Boolean);
+}
+
+function formatDateCell_(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]' && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, 'Asia/Tokyo', 'yyyy-MM-dd');
+  }
+  return String(value || '');
+}
+
+function truncateText_(value, maxLength) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? text.slice(0, maxLength) + '...' : text;
+}
+
+function normalizeText_(value) {
+  return String(value || '').replace(/\s+/g, '').trim();
+}
+
+function confidenceWeight_(confidence) {
+  const value = String(confidence || '').toLowerCase();
+  if (value === 'high') return 3;
+  if (value === 'medium') return 2;
+  if (value === 'low') return 1;
+  return 2;
+}
+
+function combineConfidence_(recordConfidence, aliasConfidence) {
+  const record = String(recordConfidence || '').toLowerCase();
+  const alias = String(aliasConfidence || '').toLowerCase();
+  if (record === 'low' || alias === 'low') return 'low';
+  if (record === 'high' && alias === 'high') return 'high';
+  return record || alias || 'medium';
 }
 
 function setupSpotCoordinates() {
@@ -967,6 +1242,17 @@ function getRows_(sheetName) {
     .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index]])));
 }
 
+function getRowsSafe_(sheetName) {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(sheetName);
+  if (!sheet || sheet.getLastRow() < 1 || sheet.getLastColumn() < 1) return [];
+  const values = sheet.getDataRange().getValues();
+  const headers = values.shift();
+  if (!headers || headers.length === 0) return [];
+  return values
+    .filter((row) => row.some((cell) => cell !== ''))
+    .map((row) => Object.fromEntries(headers.map((header, index) => [header, row[index]])));
+}
+
 function appendRow_(sheetName, object) {
   const sheet = SpreadsheetApp.getActive().getSheetByName(sheetName);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -975,14 +1261,16 @@ function appendRow_(sheetName, object) {
   return object;
 }
 
+function jsonPayload_(object) {
+  return ContentService.createTextOutput(JSON.stringify(object)).setMimeType(ContentService.MimeType.JSON);
+}
+
 function jsonOk(data) {
-  return ContentService.createTextOutput(JSON.stringify({ ok: true, data, error: null })).setMimeType(ContentService.MimeType.JSON);
+  return jsonPayload_({ ok: true, data, error: null });
 }
 
 function jsonError_(message, extra) {
-  return ContentService
-    .createTextOutput(JSON.stringify({ ok: false, data: null, error: message, ...(extra || {}) }))
-    .setMimeType(ContentService.MimeType.JSON);
+  return jsonPayload_({ ok: false, data: null, error: message, ...(extra || {}) });
 }
 
 function clamp_(value) {
@@ -1041,4 +1329,26 @@ function testGoldenTime() {
 
 function testSetupSpotCoordinates() {
   return setupSpotCoordinates();
+}
+
+function testSetupPortsideSheets() {
+  return setupPortsideSheets();
+}
+
+function testCatchSummary() {
+  const result = catchSummary_();
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+function testCatchBySpot() {
+  const result = catchBySpot_('74_motone');
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
+}
+
+function testShibudaiHistory() {
+  const result = shibudaiHistory_();
+  Logger.log(JSON.stringify(result, null, 2));
+  return result;
 }

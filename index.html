@@ -131,6 +131,12 @@
             <label class="check"><input v-model="conditions.routeRisk" type="checkbox" /> 満潮で帰路危険</label>
             <label class="check"><input v-model="conditions.noLifeJacket" type="checkbox" /> 装備不足</label>
           </fieldset>
+
+          <fieldset>
+            <legend>釣果補正</legend>
+            <label class="check"><input v-model="catchBoostEnabled" type="checkbox" /> 過去釣果補正をスコアに反映</label>
+            <p class="hint">Portside解析CSVを取り込むと、同じ磯・同じ月のシブダイ実績などを加点候補にします。</p>
+          </fieldset>
         </aside>
 
         <section class="content">
@@ -275,6 +281,40 @@
             </article>
 
             <article class="panel">
+              <div class="section-title">
+                <h2>過去釣果</h2>
+                <span>{{ catchRecordsBySpot[selectedSpotId]?.error || catchStatus }}</span>
+              </div>
+              <div v-if="selectedCatchRecords.length > 0" class="catch-detail">
+                <div>
+                  <h3>シブダイ系</h3>
+                  <p v-if="selectedCatchSummary.shibudaiMonths.length === 0" class="muted">この釣り場に紐づくシブダイ候補は未登録です。</p>
+                  <div class="mini-stats">
+                    <span v-for="item in selectedCatchSummary.shibudaiMonths" :key="item.label">{{ item.label }} {{ item.count }}件</span>
+                  </div>
+                </div>
+                <div>
+                  <h3>一緒に出ている魚</h3>
+                  <p v-if="selectedCatchSummary.companions.length === 0" class="muted">同伴魚データは未登録です。</p>
+                  <div class="mini-stats">
+                    <span v-for="item in selectedCatchSummary.companions" :key="item.label">{{ item.label }} {{ item.count }}件</span>
+                  </div>
+                </div>
+                <div>
+                  <h3>関連レポート</h3>
+                  <div class="report-list compact">
+                    <a v-for="record in selectedCatchSummary.reports" :key="record.report_url || record.date + record.fish_raw" :href="record.report_url" target="_blank" rel="noreferrer" class="report-row">
+                      <strong>{{ record.date || '日付未抽出' }} / {{ catchFishText(record) || '魚種未抽出' }}</strong>
+                      <span>{{ record.detected_point || record.list_location || '地点未抽出' }} / {{ record.method || '釣法未抽出' }}</span>
+                      <em class="pill" :class="confidenceClass(record.confidence)">{{ confidenceLabel(record.confidence) }}</em>
+                    </a>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="muted">この釣り場に紐づく釣果履歴はまだありません。CSVをスプレッドシートへ取り込むと表示されます。</p>
+            </article>
+
+            <article class="panel">
               <h2>推奨釣法</h2>
               <div class="method-box">
                 <strong>{{ selectedSpot.recommended_method }}</strong>
@@ -296,6 +336,75 @@
                   <b>{{ slot.score }}</b>
                   <em>{{ slot.comment }}</em>
                 </div>
+              </div>
+            </article>
+          </section>
+
+          <section v-if="view === 'catch'" class="stack">
+            <article class="panel">
+              <div class="section-title">
+                <div>
+                  <h2>釣果分析</h2>
+                  <p class="muted">Portside巡回解析CSVをスプレッドシートへ取り込んだ後の集計表示です。本文転載ではなく、短い根拠とURLを扱います。</p>
+                </div>
+                <button class="ghost" type="button" :disabled="catchLoading" @click="loadCatchAnalysis">{{ catchLoading ? '読込中...' : '再読込' }}</button>
+              </div>
+              <p class="api-status">{{ catchStatus }}</p>
+              <label class="check catch-toggle"><input v-model="catchBoostEnabled" type="checkbox" /> 過去釣果補正をスコアに反映</label>
+            </article>
+
+            <div class="analysis-grid">
+              <article class="panel">
+                <h2>月別シブダイ実績</h2>
+                <div class="stat-list">
+                  <div v-for="item in monthlyShibudaiStats" :key="item.label" class="stat-row">
+                    <span>{{ item.label }}</span>
+                    <b>{{ item.count }}件</b>
+                  </div>
+                  <p v-if="monthlyShibudaiStats.length === 0" class="muted">集計データ未登録です。</p>
+                </div>
+              </article>
+
+              <article class="panel">
+                <h2>磯別シブダイ実績</h2>
+                <div class="stat-list">
+                  <div v-for="item in pointShibudaiStats" :key="item.label" class="stat-row">
+                    <span>{{ item.label }}</span>
+                    <b>{{ item.count }}件</b>
+                  </div>
+                  <p v-if="pointShibudaiStats.length === 0" class="muted">集計データ未登録です。</p>
+                </div>
+              </article>
+            </div>
+
+            <div class="analysis-grid">
+              <article class="panel">
+                <h2>一緒に釣れている魚</h2>
+                <div class="mini-stats">
+                  <span v-for="item in companionFishStats" :key="item.label">{{ item.label }} {{ item.count }}</span>
+                </div>
+                <p v-if="companionFishStats.length === 0" class="muted">同伴魚データ未登録です。</p>
+              </article>
+
+              <article class="panel">
+                <h2>釣法別実績</h2>
+                <div class="mini-stats">
+                  <span v-for="item in methodStats" :key="item.label">{{ item.label }} {{ item.count }}</span>
+                </div>
+                <p v-if="methodStats.length === 0" class="muted">釣法データ未登録です。</p>
+              </article>
+            </div>
+
+            <article class="panel">
+              <h2>シブダイ候補レポート</h2>
+              <div class="report-list">
+                <a v-for="record in relatedReportRecords" :key="record.report_url || record.repo_id || record.date + record.fish_raw" :href="record.report_url" target="_blank" rel="noreferrer" class="report-row">
+                  <strong>{{ record.date || '日付未抽出' }} / {{ record.detected_point || record.list_location || '地点未抽出' }}</strong>
+                  <span>{{ catchFishText(record) || 'シブダイ候補' }} / {{ record.method || '釣法未抽出' }}</span>
+                  <small v-if="record.evidence_text">{{ record.evidence_text }}</small>
+                  <em class="pill" :class="confidenceClass(record.confidence)">{{ confidenceLabel(record.confidence) }}</em>
+                </a>
+                <p v-if="relatedReportRecords.length === 0" class="muted">シブダイ候補データ未登録です。</p>
               </div>
             </article>
           </section>

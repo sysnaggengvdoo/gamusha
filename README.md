@@ -13,6 +13,7 @@
 - 海況自動取得: 今日から7日後までの日付と基準エリアを選んでOpen-Meteo由来の条件を反映
 - ゴールデンタイム: 潮位変化、海流、日の入り/日の出、月高度、波風安全を重ねて推定時間帯を表示
 - 釣り場詳細: 緯度経度がある釣り場は座標表示とGoogle Mapsリンクを表示
+- 釣果分析: Portside巡回解析CSVをスプレッドシートへ取り込み、月別・磯別・魚種別・釣法別の実績と関連URLを表示
 
 ## ファイル
 
@@ -55,6 +56,9 @@ https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=scoreAll
 https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=timeline&spot_id=spot-001
 https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=forecast&date=2026-06-13&area=田牛
 https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=goldenTime&spot_id=74_motone&date=2026-07-05
+https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=catchSummary
+https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=catchBySpot&spot_id=74_motone
+https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=shibudaiHistory
 ```
 
 ## v0.2 メモ
@@ -66,3 +70,24 @@ https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=goldenTime&spot_
 - `goldenTime` はOpen-Meteo Marine APIの `sea_level_height_msl`, `ocean_current_velocity`, `ocean_current_direction` とWeather APIの日の入り/日の出、雲量、風速を使った推定です。沿岸地磯では誤差があるため参考値として扱います。
 - `goldenTime` APIは互換用に `getGoldenTime`, `golden`, `gt` でも呼べます。未対応actionは `Unknown action: ...` と `availableActions` を返します。
 - GASを貼り替えたら `testSetupSpotCoordinates`, `testForecast`, `testGoldenTime` を実行し、成功後にWebアプリを新バージョンで再デプロイしてください。
+
+## Portside釣果分析メモ
+
+PythonクローラーはWebアプリへ組み込まず、解析済みCSV / Excelをスプレッドシートへ取り込む前提です。
+
+GASを貼り替えたあと `setupPortsideSheets` を手動実行すると、既存スプレッドシートに以下のシートとヘッダーを作成します。
+
+- `report_index`
+- `report_details`
+- `catch_records`
+- `shibudai_candidates`
+- `point_month_summary`
+- `point_aliases`
+
+追加API:
+
+- `catchSummary`: 月別・磯別・魚種別集計、釣果レコード、シブダイ候補を返します。
+- `catchBySpot&spot_id=...`: `point_aliases` を使って釣り場別の釣果履歴を返します。
+- `shibudaiHistory`: シブダイ・フエダイ候補だけを返します。
+
+`point_aliases` の `confidence=low` は広域表記として扱い、スコア補正ON時も加点を半分扱いにします。本文の長文転載は避け、画面では短い根拠文、日付、魚種、釣法、レポートURLを中心に表示します。
