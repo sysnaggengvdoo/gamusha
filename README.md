@@ -83,6 +83,7 @@ GASを貼り替えたあと `setupPortsideSheets` を手動実行すると、既
 - `shibudai_candidates`
 - `point_month_summary`
 - `point_aliases`
+- `failed_urls`
 
 追加API:
 
@@ -91,3 +92,22 @@ GASを貼り替えたあと `setupPortsideSheets` を手動実行すると、既
 - `shibudaiHistory`: シブダイ・フエダイ候補だけを返します。
 
 `point_aliases` の `confidence=low` は広域表記として扱い、スコア補正ON時も加点を半分扱いにします。本文の長文転載は避け、画面では短い根拠文、日付、魚種、釣法、レポートURLを中心に表示します。
+
+### CSV出力
+
+Python側のCSVはGoogleスプレッドシートへ手動インポートしやすいよう、すべて `encoding="utf-8-sig"` で出力します。ファイル名は取り込み先シート名と一致します。
+
+```powershell
+cd C:\Users\nagan\Documents\GitHub\gamusha
+python .\crawl_portside.py --out-dir .\data\portside
+```
+
+出力先:
+
+- `data/portside/report_index.csv` -> `report_index`
+- `data/portside/report_details.csv` -> `report_details`
+- `data/portside/catch_records.csv` -> `catch_records`
+- `data/portside/shibudai_candidates.csv` -> `shibudai_candidates`
+- `data/portside/point_month_summary.csv` -> `point_month_summary`
+- `data/portside/point_aliases.csv` -> `point_aliases`
+- `data/portside/failed_urls.csv` -> `failed_urls`

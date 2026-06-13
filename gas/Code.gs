@@ -10,6 +10,7 @@ const SHEETS = {
   shibudaiCandidates: 'shibudai_candidates',
   pointMonthSummary: 'point_month_summary',
   pointAliases: 'point_aliases',
+  failedUrls: 'failed_urls',
 };
 
 const AVAILABLE_GET_ACTIONS = [
@@ -35,6 +36,7 @@ const PORTSIDE_SHEET_HEADERS = {
   shibudai_candidates: ['date', 'year', 'month', 'repo_id', 'report_url', 'list_location', 'detected_point', 'fish_raw', 'fish_normalized', 'size_cm', 'weight_kg', 'method', 'is_night_fishing', 'evidence_text', 'confidence'],
   point_month_summary: ['point', 'month', 'fish_normalized', 'count', 'report_urls'],
   point_aliases: ['spot_id', 'app_spot_name', 'alias', 'confidence', 'memo'],
+  failed_urls: ['url', 'source', 'repo_id', 'fetch_status', 'error_message', 'last_attempt_at'],
 };
 
 const PORTSIDE_DEFAULT_ALIASES = [
