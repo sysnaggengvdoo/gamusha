@@ -191,9 +191,41 @@
                   <strong>{{ selectedResult.score }}</strong>
                   <span>{{ selectedResult.judge }}</span>
                 </div>
-                <ul class="reason-list">
-                  <li v-for="reason in selectedResult.reasons" :key="reason">{{ reason }}</li>
-                </ul>
+                <div class="score-breakdown">
+                  <div class="reason-group">
+                    <h3>加点理由</h3>
+                    <ul class="reason-list">
+                      <li v-for="reason in selectedResult.reasonGroups.positives" :key="reason.label + reason.text">
+                        <strong>{{ reason.label }} <span>{{ reason.value }}</span></strong>
+                        <p>{{ reason.text }}</p>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div class="reason-group">
+                    <h3>減点理由</h3>
+                    <ul class="reason-list">
+                      <li v-for="reason in selectedResult.reasonGroups.negatives" :key="reason.label + reason.text">
+                        <strong>{{ reason.label }} <span>{{ reason.value }}</span></strong>
+                        <p>{{ reason.text }}</p>
+                      </li>
+                      <li v-if="selectedResult.reasonGroups.negatives.length === 0">
+                        <strong>減点なし</strong>
+                        <p>現時点の入力条件では大きな減点材料はありません。</p>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div class="reason-group">
+                    <h3>安全ゲート</h3>
+                    <ul class="reason-list">
+                      <li v-for="reason in selectedResult.reasonGroups.safety" :key="reason.label + reason.text">
+                        <strong>{{ reason.label }} <span>{{ reason.value }}</span></strong>
+                        <p>{{ reason.text }}</p>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
               </article>
 
               <article class="panel">

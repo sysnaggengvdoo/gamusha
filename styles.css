@@ -381,6 +381,43 @@ fieldset {
   line-height: 1.55;
 }
 
+.score-breakdown {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.reason-group h3 {
+  margin: 0 0 8px;
+  color: #eef6f0;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.reason-group .reason-list {
+  margin-top: 0;
+}
+
+.reason-list strong {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: #f3f8f4;
+  font-size: 0.92rem;
+}
+
+.reason-list strong span {
+  color: var(--yellow);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.reason-list p {
+  margin: 5px 0 0;
+  color: var(--muted);
+}
+
 .specs {
   display: grid;
   gap: 8px;

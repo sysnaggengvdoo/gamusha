@@ -189,6 +189,46 @@ function bestWindowFromScore(score, blocked) {
   return "下見向き";
 }
 
+function reasonItem(label, text, value = "") {
+  return { label, text, value };
+}
+
+function buildReasonGroups(parts, safety, spot, conditions) {
+  const positives = [];
+  const negatives = [];
+  const safetyReasons = safety.reasons.map((text) => reasonItem("安全", text, safety.blocked ? "停止" : "注意"));
+
+  if (parts.water >= 75) positives.push(reasonItem("水温", `水温 ${conditions.waterTemp}℃ はシブダイ狙いで好材料。`, `+${Math.round(parts.water * 0.2)}`));
+  else if (parts.water < 55) negatives.push(reasonItem("水温", `水温条件が弱く、活性面の期待値を下げます。`, `${Math.round(parts.water * 0.2)}`));
+
+  if (parts.tide >= 70) positives.push(reasonItem("潮", `潮が動く前提で、餌が効きやすい時間帯です。`, `+${Math.round(parts.tide * 0.2)}`));
+  else if (parts.tide < 45) negatives.push(reasonItem("潮", `潮止まり寄りで、勝負時間としては弱めです。`, `${Math.round(parts.tide * 0.2)}`));
+
+  if (parts.sea >= 75) positives.push(reasonItem("風波", `波高 ${conditions.waveHeight}m、風速 ${conditions.windSpeed}m/s は操作しやすい範囲です。`, `+${Math.round(parts.sea * 0.2)}`));
+  else if (parts.sea < 55) negatives.push(reasonItem("風波", `風波条件が悪く、仕掛け操作と足場安全に影響します。`, `${Math.round(parts.sea * 0.2)}`));
+
+  if (parts.moon >= 75) positives.push(reasonItem("月", `月条件は暗さを作りやすく、夜の差し込みに期待できます。`, `+${Math.round(parts.moon * 0.1)}`));
+  else if (parts.moon < 50) negatives.push(reasonItem("月", `月明かりが強めで、暗い溝や根の影を優先したい条件です。`, `${Math.round(parts.moon * 0.1)}`));
+
+  if (Number(spot.shibudai_score || 0) >= 4) positives.push(reasonItem("釣り場", `シブダイ適性 ${spot.shibudai_score}/5。${spot.recommended_method} が合う候補です。`, `+${Math.round(parts.spot * 0.15)}`));
+  else negatives.push(reasonItem("釣り場", `シブダイ適性 ${spot.shibudai_score}/5。今回は本命より調査寄りです。`, `${Math.round(parts.spot * 0.15)}`));
+
+  if (parts.past > 45) positives.push(reasonItem("ログ", `過去ログに好材料があります。`, `+${Math.round(parts.past * 0.15)}`));
+  else if (parts.confidencePenalty > 0) negatives.push(reasonItem("信頼度", `この釣り場の実釣ログが少ないため、信頼度を少し下げています。`, `-${parts.confidencePenalty}`));
+
+  if (parts.dangerPenalty > 0) negatives.push(reasonItem("安全補正", `安全面の注意があり、総合点から減点しています。`, `-${parts.dangerPenalty}`));
+
+  if (safetyReasons.length === 0) {
+    safetyReasons.push(reasonItem("安全", "安全ゲートは通過。現地で波周期、足場、退路を再確認。", "通過"));
+  }
+
+  return {
+    positives,
+    negatives,
+    safety: safetyReasons,
+  };
+}
+
 function createResult(spot, conditions, logs) {
   const water = scoreWaterTemp(conditions.waterTemp, conditions.tempTrend);
   const tide = scoreTide(conditions.tide, spot);
@@ -211,6 +251,8 @@ function createResult(spot, conditions, logs) {
 
   const score = safety.blocked ? 0 : clamp(raw);
   const judge = judgeScore(score, safety.blocked);
+  const parts = { water, tide, sea, moon, spot: spotScore, past, dangerPenalty: safety.penalty, confidencePenalty };
+  const reasonGroups = buildReasonGroups(parts, safety, spot, conditions);
   const reasons = [
     `水温 ${water}/100、潮 ${tide}/100、風波 ${sea}/100、月 ${moon}/100。`,
     `地形適性 ${spotScore}/100、過去ログ補正 ${past}/100。`,
@@ -226,8 +268,9 @@ function createResult(spot, conditions, logs) {
     judge,
     safetyLabel: safetyLabel(spot, safety.blocked),
     bestWindow: bestWindowFromScore(score, safety.blocked),
-    parts: { water, tide, sea, moon, spot: spotScore, past, dangerPenalty: safety.penalty, confidencePenalty },
+    parts,
     reasons,
+    reasonGroups,
   };
 }
 
