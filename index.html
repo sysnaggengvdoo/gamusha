@@ -46,9 +46,10 @@
           </div>
 
           <button class="primary fetch-button" type="button" :disabled="autoLoading" @click="fetchAutoConditions">
-            {{ autoLoading ? '取得中...' : '海況を自動取得' }}
+            {{ autoLoading ? '取得中...' : '海況・GTを自動取得' }}
           </button>
           <p class="api-status">{{ forecastStatus }}</p>
+          <p class="api-status">{{ goldenStatus }}</p>
 
           <label>
             <span>水温</span>
@@ -167,6 +168,7 @@
                     <small>{{ spot.area }} / {{ spot.type }} / 徒歩{{ spot.access_min }}分 / {{ spot.recommended_method }}</small>
                   </span>
                   <span class="time">シブ {{ spot.shibudai_score }} / 難 {{ spot.difficulty }}</span>
+                  <span class="gt-pill">{{ goldenTimeLabel(spot) }}</span>
                   <span class="pill" :class="safetyClass(spot)">{{ safetyLabel(spot) }}</span>
                   <b>{{ scoreSpot(spot).score }}</b>
                 </button>
@@ -245,6 +247,32 @@
                 </dl>
               </article>
             </div>
+
+            <article class="panel">
+              <div class="section-title">
+                <h2>ゴールデンタイム</h2>
+                <span>潮位・潮流は推定参考値</span>
+              </div>
+              <div class="gt-meta">
+                <span>日没 {{ selectedGoldenTime.astronomy?.sunset || '推定中' }}</span>
+                <span>日の出 {{ selectedGoldenTime.astronomy?.sunrise || '推定中' }}</span>
+                <span v-if="selectedGoldenTime.astronomy?.moon_age !== ''">月齢 {{ selectedGoldenTime.astronomy.moon_age }}</span>
+                <span v-if="selectedGoldenTime.astronomy?.moonrise">月出 {{ selectedGoldenTime.astronomy.moonrise }}</span>
+                <span v-if="selectedGoldenTime.astronomy?.moonset">月入 {{ selectedGoldenTime.astronomy.moonset }}</span>
+              </div>
+              <div class="gt-summary">
+                <div v-for="window in selectedGoldenTime.golden_times" :key="window.start + window.end" class="gt-card">
+                  <div>
+                    <strong>{{ window.start }}〜{{ window.end }}</strong>
+                    <span>{{ window.label }} / {{ window.score }}</span>
+                  </div>
+                  <ul>
+                    <li v-for="reason in window.reasons" :key="reason">{{ reason }}</li>
+                  </ul>
+                </div>
+              </div>
+              <p class="muted">{{ selectedGoldenTime.notice || 'Open-Meteo由来の潮位・潮流と天文計算による推定です。現地判断を優先してください。' }}</p>
+            </article>
 
             <article class="panel">
               <h2>推奨釣法</h2>

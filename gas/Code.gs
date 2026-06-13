@@ -71,6 +71,7 @@ function doGet(e) {
     if (action === 'scoreAll') return jsonOk(scoreAll_(getLatestCondition_()));
     if (action === 'timeline') return jsonOk(createTimeline_(e.parameter.spot_id, getLatestCondition_()));
     if (action === 'forecast') return forecastResponse_(e.parameter.date, e.parameter.area);
+    if (action === 'goldenTime') return goldenTimeResponse_(e.parameter.spot_id, e.parameter.date);
     return jsonError_('Unknown action');
   } catch (error) {
     return jsonError_(String(error));
@@ -153,28 +154,28 @@ function forecastResponse_(targetDate, areaName) {
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function fetchWeatherForecast_(point, date) {
+function fetchWeatherForecast_(point, date, endDate) {
   const params = {
     latitude: point.latitude,
     longitude: point.longitude,
     timezone: 'Asia/Tokyo',
     start_date: date,
-    end_date: date,
-    hourly: 'weather_code,wind_speed_10m,wind_direction_10m',
-    daily: 'weather_code,wind_speed_10m_max,wind_direction_10m_dominant',
+    end_date: endDate || date,
+    hourly: 'weather_code,wind_speed_10m,wind_direction_10m,cloud_cover',
+    daily: 'weather_code,wind_speed_10m_max,wind_direction_10m_dominant,sunrise,sunset',
     wind_speed_unit: 'ms',
   };
   return fetchJson_('https://api.open-meteo.com/v1/forecast', params);
 }
 
-function fetchMarineForecast_(point, date) {
+function fetchMarineForecast_(point, date, endDate) {
   const params = {
     latitude: point.latitude,
     longitude: point.longitude,
     timezone: 'Asia/Tokyo',
     start_date: date,
-    end_date: date,
-    hourly: 'wave_height,swell_wave_height,swell_wave_direction,sea_surface_temperature,sea_level_height_msl',
+    end_date: endDate || date,
+    hourly: 'wave_height,swell_wave_height,swell_wave_direction,sea_surface_temperature,sea_level_height_msl,ocean_current_velocity,ocean_current_direction',
     daily: 'wave_height_max,swell_wave_height_max,swell_wave_direction_dominant',
     cell_selection: 'sea',
   };
@@ -219,6 +220,363 @@ function buildAutoConditions_(date, weather, marine) {
     thunderRisk: hasThunderRisk_(weatherCodes),
     routeRisk: max_(seaLevels) >= 0.45,
   };
+}
+
+function goldenTimeResponse_(spotId, targetDate) {
+  const spot = getSpotById(spotId);
+  if (!spot) return jsonError_('spot not found');
+  const date = targetDate || Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd');
+  const endDate = nextDate_(date);
+  const point = pointForSpot_(spot);
+  const weather = fetchWeatherForecast_(point, date, endDate);
+  const marine = fetchMarineForecast_(point, date, endDate);
+  const result = buildGoldenTime_(spot, date, point, weather, marine);
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true, ...result }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function buildGoldenTime_(spot, date, point, weather, marine) {
+  const nextDate = nextDate_(date);
+  const hourlyMarine = marine.hourly || {};
+  const hourlyWeather = weather.hourly || {};
+  const times = hourlyMarine.time || [];
+  const seaLevels = hourlyMarine.sea_level_height_msl || [];
+  const tideRange = max_(seaLevels) - min_(seaLevels);
+  const sunTimes = sunTimesFromWeather_(weather, date, nextDate, point);
+
+  const hourly = times
+    .map((time, index) => {
+      const day = String(time).slice(0, 10);
+      const hour = Number(String(time).slice(11, 13));
+      if (!((day === date && hour >= 18) || (day === nextDate && hour <= 5))) return null;
+
+      const weatherIndex = matchingTimeIndex_(hourlyWeather.time || [], time);
+      const dt = parseLocalTime_(time);
+      const seaLevel = numberOr_(seaLevels[index], 0);
+      const prevLevel = numberOr_(seaLevels[index - 1], seaLevel);
+      const nextLevel = numberOr_(seaLevels[index + 1], seaLevel);
+      const movement = Math.max(Math.abs(seaLevel - prevLevel), Math.abs(nextLevel - seaLevel));
+      const currentVelocity = numberOr_(hourlyMarine.ocean_current_velocity && hourlyMarine.ocean_current_velocity[index], 0);
+      const waveHeight = numberOr_(hourlyMarine.wave_height && hourlyMarine.wave_height[index], 0.8);
+      const swellDirection = directionToCompass_(numberOr_(hourlyMarine.swell_wave_direction && hourlyMarine.swell_wave_direction[index], 225));
+      const windSpeed = numberOr_(hourlyWeather.wind_speed_10m && hourlyWeather.wind_speed_10m[weatherIndex], 4);
+      const weatherCode = numberOr_(hourlyWeather.weather_code && hourlyWeather.weather_code[weatherIndex], 0);
+      const cloudCover = numberOr_(hourlyWeather.cloud_cover && hourlyWeather.cloud_cover[weatherIndex], 0);
+      const moon = moonDetails_(dt, point.latitude, point.longitude);
+      const dangerPenalty = dangerPenalty_(spot, waveHeight, windSpeed, swellDirection, weatherCode);
+
+      const tideMovementScore = tideMovementScore_(movement, seaLevels, index);
+      const tideSizeScore = tideSizeScore_(tideRange, waveHeight);
+      const currentScore = currentScore_(currentVelocity);
+      const darknessScore = darknessScore_(dt, sunTimes.sunset, sunTimes.sunrise);
+      const moonScore = moonScore_(moon, cloudCover);
+      const sunScore = sunTransitionScore_(dt, sunTimes.sunset, sunTimes.sunrise);
+      const seaSafetyScore = seaSafetyScore_(waveHeight, windSpeed, swellDirection, spot, weatherCode);
+      const goldenScore = clamp_(
+        tideMovementScore * 0.30 +
+        tideSizeScore * 0.15 +
+        currentScore * 0.15 +
+        darknessScore * 0.15 +
+        moonScore * 0.10 +
+        sunScore * 0.05 +
+        seaSafetyScore * 0.10 -
+        dangerPenalty
+      );
+
+      return {
+        time: hourLabel_(dt),
+        iso_time: time,
+        golden_score: goldenScore,
+        tide_movement_score: tideMovementScore,
+        tide_size_score: tideSizeScore,
+        current_score: currentScore,
+        darkness_score: darknessScore,
+        moon_score: moonScore,
+        sun_score: sunScore,
+        sea_safety_score: seaSafetyScore,
+        tide_level: round1_(seaLevel),
+        tide_movement: round1_(movement),
+        current_velocity: round1_(currentVelocity),
+        current_direction: directionToCompass_(numberOr_(hourlyMarine.ocean_current_direction && hourlyMarine.ocean_current_direction[index], 0)),
+        wave_height: round1_(waveHeight),
+        wind_speed: round1_(windSpeed),
+        moon_age: round1_(moon.age),
+        moon_altitude: round1_(moon.altitude),
+        label: goldenLabel_(goldenScore),
+        reasons: goldenReasons_(tideMovementScore, currentScore, darknessScore, moonScore, sunScore, seaSafetyScore, dangerPenalty),
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    spot_id: spot.spot_id,
+    date,
+    source: 'open_meteo_estimate',
+    notice: '潮位・潮流はOpen-Meteo Marine APIの推定参考値です。沿岸地磯では誤差があるため現地判断を優先してください。',
+    astronomy: astronomySummary_(hourly, sunTimes),
+    golden_times: buildGoldenWindows_(hourly),
+    hourly,
+  };
+}
+
+function astronomySummary_(hourly, sunTimes) {
+  return {
+    sunset: hourLabel_(sunTimes.sunset),
+    sunrise: hourLabel_(sunTimes.sunrise),
+    moon_age: hourly.length ? hourly[0].moon_age : '',
+    moonrise: moonCrossing_(hourly, 'rise'),
+    moonset: moonCrossing_(hourly, 'set'),
+  };
+}
+
+function moonCrossing_(hourly, type) {
+  for (let index = 1; index < hourly.length; index++) {
+    const prev = Number(hourly[index - 1].moon_altitude);
+    const next = Number(hourly[index].moon_altitude);
+    if (type === 'rise' && prev < 0 && next >= 0) return hourly[index].time;
+    if (type === 'set' && prev >= 0 && next < 0) return hourly[index].time;
+  }
+  return '';
+}
+
+function buildGoldenWindows_(hourly) {
+  const winners = [];
+  let current = [];
+  hourly.forEach((slot) => {
+    if (slot.golden_score >= 70) {
+      current.push(slot);
+    } else if (current.length) {
+      winners.push(current);
+      current = [];
+    }
+  });
+  if (current.length) winners.push(current);
+
+  const windows = winners
+    .map((group) => {
+      const best = group.reduce((top, slot) => slot.golden_score > top.golden_score ? slot : top, group[0]);
+      const end = addHourLabel_(group[group.length - 1].iso_time);
+      return {
+        start: group[0].time,
+        end,
+        score: best.golden_score,
+        label: goldenLabel_(best.golden_score),
+        reasons: best.reasons,
+      };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+
+  if (windows.length > 0) return windows;
+  const best = hourly.reduce((top, slot) => !top || slot.golden_score > top.golden_score ? slot : top, null);
+  return best ? [{
+    start: best.time,
+    end: addHourLabel_(best.iso_time),
+    score: best.golden_score,
+    label: goldenLabel_(best.golden_score),
+    reasons: best.reasons,
+  }] : [];
+}
+
+function tideMovementScore_(movement, seaLevels, index) {
+  let score = 42;
+  if (movement >= 0.14) score = 96;
+  else if (movement >= 0.09) score = 86;
+  else if (movement >= 0.05) score = 74;
+  else if (movement >= 0.025) score = 58;
+  const prev = numberOr_(seaLevels[index], 0) - numberOr_(seaLevels[index - 1], numberOr_(seaLevels[index], 0));
+  const next = numberOr_(seaLevels[index + 1], numberOr_(seaLevels[index], 0)) - numberOr_(seaLevels[index], 0);
+  if (prev !== 0 && next !== 0 && (prev > 0) !== (next > 0)) score += 10;
+  return clamp_(score);
+}
+
+function tideSizeScore_(range, waveHeight) {
+  let score = range >= 0.9 ? 94 : range >= 0.6 ? 82 : range >= 0.35 ? 68 : range >= 0.18 ? 52 : 40;
+  if (range >= 0.9 && waveHeight >= 1.2) score -= 10;
+  return clamp_(score);
+}
+
+function currentScore_(velocity) {
+  if (velocity <= 0.05) return 42;
+  if (velocity <= 0.35) return 62;
+  if (velocity <= 1.4) return 92;
+  if (velocity <= 2.4) return 78;
+  if (velocity <= 3.4) return 55;
+  return 34;
+}
+
+function darknessScore_(dt, sunset, sunrise) {
+  const afterSunset = (dt.getTime() - sunset.getTime()) / 60000;
+  const beforeSunrise = (sunrise.getTime() - dt.getTime()) / 60000;
+  if (afterSunset >= 70 && beforeSunrise >= 70) return 96;
+  if (afterSunset >= 30 || beforeSunrise >= 30) return 82;
+  if (afterSunset >= 0 || beforeSunrise >= 0) return 62;
+  return 28;
+}
+
+function moonScore_(moon, cloudCover) {
+  let score = moon.altitude < -2 ? 96 : moon.altitude < 8 ? 86 : moon.altitude < 22 ? 70 : 54;
+  if (moon.illumination >= 0.75 && moon.altitude >= 12) score -= 22;
+  if (cloudCover >= 65 && moon.altitude >= 0) score += 8;
+  return clamp_(score);
+}
+
+function sunTransitionScore_(dt, sunset, sunrise) {
+  const afterSunset = (dt.getTime() - sunset.getTime()) / 60000;
+  const beforeSunrise = (sunrise.getTime() - dt.getTime()) / 60000;
+  if (afterSunset >= 30 && afterSunset <= 150) return 88;
+  if (beforeSunrise >= 30 && beforeSunrise <= 120) return 82;
+  return 48;
+}
+
+function seaSafetyScore_(waveHeight, windSpeed, swellDirection, spot, weatherCode) {
+  if (weatherCode >= 95 && weatherCode <= 99) return 0;
+  let score = 88;
+  if (waveHeight > 0.8) score -= (waveHeight - 0.8) * 28;
+  if (windSpeed > 5) score -= (windSpeed - 5) * 5;
+  const ngDirections = String(spot.ng_swell_direction || '').split(',').map((item) => item.trim()).filter(Boolean);
+  if (ngDirections.includes(swellDirection)) score -= waveHeight >= 1.0 ? 28 : 12;
+  if (Number(spot.night_safety || 3) <= 1) score -= 35;
+  if (Number(spot.night_safety || 3) === 2) score -= 10;
+  return clamp_(score);
+}
+
+function dangerPenalty_(spot, waveHeight, windSpeed, swellDirection, weatherCode) {
+  let penalty = 0;
+  if (weatherCode >= 95 && weatherCode <= 99) penalty += 80;
+  if (waveHeight >= 1.7) penalty += 36;
+  else if (waveHeight >= 1.3) penalty += 16;
+  if (windSpeed >= 12) penalty += 26;
+  else if (windSpeed >= 9) penalty += 10;
+  const ngDirections = String(spot.ng_swell_direction || '').split(',').map((item) => item.trim()).filter(Boolean);
+  if (ngDirections.includes(swellDirection) && waveHeight >= 1.1) penalty += 18;
+  if (Number(spot.night_safety || 3) <= 1) penalty += 26;
+  return penalty;
+}
+
+function goldenReasons_(tideMovement, current, darkness, moon, sun, seaSafety, dangerPenalty) {
+  const reasons = [];
+  if (tideMovement >= 78) reasons.push('潮位変化が大きく、潮が動く推定');
+  if (current >= 78) reasons.push('海流速度が適度で仕掛けが効きやすい推定');
+  if (darkness >= 82) reasons.push('日没後で暗い時間帯');
+  if (moon >= 82) reasons.push('月高度が低い、または月没後で暗い');
+  if (sun >= 80) reasons.push('日没後または夜明け前の移行帯');
+  if (seaSafety >= 76) reasons.push('波風が許容範囲');
+  if (dangerPenalty > 0) reasons.push('危険条件があるため安全側に減点');
+  return reasons.length ? reasons : ['複数条件が平均的に揃う推定時間'];
+}
+
+function goldenLabel_(score) {
+  if (score >= 82) return '本命集中';
+  if (score >= 74) return '継続価値あり';
+  if (score >= 66) return '短時間勝負';
+  return '調査候補';
+}
+
+function sunTimesFromWeather_(weather, date, nextDate, point) {
+  const daily = weather.daily || {};
+  const days = daily.time || [];
+  const sunsetIndex = days.indexOf(date);
+  const sunriseIndex = days.indexOf(nextDate);
+  const sunsetText = sunsetIndex >= 0 && daily.sunset ? daily.sunset[sunsetIndex] : date + 'T18:45';
+  const sunriseText = sunriseIndex >= 0 && daily.sunrise ? daily.sunrise[sunriseIndex] : nextDate + 'T04:40';
+  return {
+    sunset: parseLocalTime_(sunsetText),
+    sunrise: parseLocalTime_(sunriseText),
+  };
+}
+
+function moonDetails_(dt, latitude, longitude) {
+  const d = toDays_(dt);
+  const coords = moonCoords_(d);
+  const lw = -longitude * Math.PI / 180;
+  const phi = latitude * Math.PI / 180;
+  const H = siderealTime_(d, lw) - coords.ra;
+  const altitude = Math.asin(Math.sin(phi) * Math.sin(coords.dec) + Math.cos(phi) * Math.cos(coords.dec) * Math.cos(H));
+  const age = moonAge_(dt);
+  const illumination = (1 - Math.cos(2 * Math.PI * age / 29.53058867)) / 2;
+  return {
+    age,
+    illumination,
+    altitude: altitude * 180 / Math.PI,
+  };
+}
+
+function moonCoords_(d) {
+  const rad = Math.PI / 180;
+  const L = rad * (218.316 + 13.176396 * d);
+  const M = rad * (134.963 + 13.064993 * d);
+  const F = rad * (93.272 + 13.229350 * d);
+  const l = L + rad * 6.289 * Math.sin(M);
+  const b = rad * 5.128 * Math.sin(F);
+  return {
+    ra: rightAscension_(l, b),
+    dec: declination_(l, b),
+  };
+}
+
+function rightAscension_(l, b) {
+  const e = Math.PI / 180 * 23.4397;
+  return Math.atan2(Math.sin(l) * Math.cos(e) - Math.tan(b) * Math.sin(e), Math.cos(l));
+}
+
+function declination_(l, b) {
+  const e = Math.PI / 180 * 23.4397;
+  return Math.asin(Math.sin(b) * Math.cos(e) + Math.cos(b) * Math.sin(e) * Math.sin(l));
+}
+
+function siderealTime_(d, lw) {
+  return Math.PI / 180 * (280.16 + 360.9856235 * d) - lw;
+}
+
+function toDays_(date) {
+  return date.getTime() / 86400000 - 10957.5;
+}
+
+function moonAge_(date) {
+  const knownNewMoon = new Date('2000-01-06T18:14:00Z');
+  const days = (date.getTime() - knownNewMoon.getTime()) / 86400000;
+  return ((days % 29.53058867) + 29.53058867) % 29.53058867;
+}
+
+function pointForSpot_(spot) {
+  const latitude = Number(spot.latitude);
+  const longitude = Number(spot.longitude);
+  if (isFinite(latitude) && isFinite(longitude) && latitude !== 0 && longitude !== 0) return { latitude, longitude };
+  const area = spot.base_area || baseAreaFor_(spot.area);
+  return BASE_AREAS[area] || BASE_AREAS['田牛'];
+}
+
+function matchingTimeIndex_(times, targetTime) {
+  const index = (times || []).indexOf(targetTime);
+  return index >= 0 ? index : 0;
+}
+
+function parseLocalTime_(text) {
+  const value = String(text || '');
+  return new Date(value.length === 16 ? value + ':00+09:00' : value);
+}
+
+function hourLabel_(date) {
+  return Utilities.formatDate(date, 'Asia/Tokyo', 'HH:mm');
+}
+
+function addHourLabel_(isoTime) {
+  const date = parseLocalTime_(isoTime);
+  date.setHours(date.getHours() + 1);
+  return hourLabel_(date);
+}
+
+function nextDate_(dateText) {
+  const date = new Date(dateText + 'T00:00:00+09:00');
+  date.setDate(date.getDate() + 1);
+  return Utilities.formatDate(date, 'Asia/Tokyo', 'yyyy-MM-dd');
+}
+
+function numberOr_(value, fallback) {
+  const number = Number(value);
+  return isFinite(number) ? number : fallback;
 }
 
 function hasThunderRisk_(codes) {
@@ -578,6 +936,15 @@ function testForecast() {
   const text = forecastResponse_(
     Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd'),
     '田牛'
+  ).getContent();
+  Logger.log(text);
+  return JSON.parse(text);
+}
+
+function testGoldenTime() {
+  const text = goldenTimeResponse_(
+    '74_motone',
+    Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd')
   ).getContent();
   Logger.log(text);
   return JSON.parse(text);

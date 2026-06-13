@@ -11,6 +11,7 @@
 - シブダイスコア: 水温、潮、風波、月、地形、過去ログから計算
 - 安全判定: 雷、装備不足、危険波高、NGうねり、強風は出撃不可
 - 海況自動取得: 今日から7日後までの日付と基準エリアを選んでOpen-Meteo由来の条件を反映
+- ゴールデンタイム: 潮位変化、海流、日の入り/日の出、月高度、波風安全を重ねて推定時間帯を表示
 - 釣り場詳細: 緯度経度がある釣り場は座標表示とGoogle Mapsリンクを表示
 
 ## ファイル
@@ -53,6 +54,7 @@ https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=getSpots
 https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=scoreAll
 https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=timeline&spot_id=spot-001
 https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=forecast&date=2026-06-13&area=田牛
+https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=goldenTime&spot_id=74_motone&date=2026-07-05
 ```
 
 ## v0.2 メモ
@@ -61,4 +63,5 @@ https://script.google.com/macros/s/xxxxxxxxxxxxxxxx/exec?action=forecast&date=20
 - `soloNight` と `noLifeJacket` は自動取得できないため、画面の手入力値を保持します。
 - `routeRisk` は `sea_level_height_msl` を使った簡易判定です。沿岸精度に限界があるため参考値として扱います。
 - 座標列を既存の `spots` シートへ反映する場合は、GASを貼り替えたあと `setupSpotCoordinates` を手動実行してください。`latitude`, `longitude`, `coord_accuracy`, `coordinate_note`, `base_area` がなければ追加し、`spot_id` が一致する既存行だけを更新します。
-- GASを貼り替えたら `testSetupSpotCoordinates` と `testForecast` を実行し、成功後にWebアプリを新バージョンで再デプロイしてください。
+- `goldenTime` はOpen-Meteo Marine APIの `sea_level_height_msl`, `ocean_current_velocity`, `ocean_current_direction` とWeather APIの日の入り/日の出、雲量、風速を使った推定です。沿岸地磯では誤差があるため参考値として扱います。
+- GASを貼り替えたら `testSetupSpotCoordinates`, `testForecast`, `testGoldenTime` を実行し、成功後にWebアプリを新バージョンで再デプロイしてください。

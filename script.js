@@ -242,10 +242,11 @@ function reasonItem(label, text, value = "") {
   return { label, text, value };
 }
 
-function buildReasonGroups(parts, safety, spot, conditions) {
+function buildReasonGroups(parts, safety, spot, conditions, goldenTime) {
   const positives = [];
   const negatives = [];
   const safetyReasons = safety.reasons.map((text) => reasonItem("安全", text, safety.blocked ? "停止" : "注意"));
+  const bestGolden = bestGoldenTime(goldenTime);
 
   if (parts.water >= 75) positives.push(reasonItem("水温", `水温 ${conditions.waterTemp}℃ はシブダイ狙いで好材料。`, `+${Math.round(parts.water * 0.2)}`));
   else if (parts.water < 55) negatives.push(reasonItem("水温", `水温条件が弱く、活性面の期待値を下げます。`, `${Math.round(parts.water * 0.2)}`));
@@ -267,6 +268,10 @@ function buildReasonGroups(parts, safety, spot, conditions) {
 
   if (parts.dangerPenalty > 0) negatives.push(reasonItem("安全補正", `安全面の注意があり、総合点から減点しています。`, `-${parts.dangerPenalty}`));
 
+  if (parts.goldenTimeBonus > 0 && bestGolden) {
+    positives.push(reasonItem("GT", `${bestGolden.start}〜${bestGolden.end} は ${bestGolden.label}。潮・暗さ・月条件の重なりを加点しています。`, `+${parts.goldenTimeBonus}`));
+  }
+
   if (safetyReasons.length === 0) {
     safetyReasons.push(reasonItem("安全", "安全ゲートは通過。現地で波周期、足場、退路を再確認。", "通過"));
   }
@@ -278,7 +283,7 @@ function buildReasonGroups(parts, safety, spot, conditions) {
   };
 }
 
-function createResult(spot, conditions, logs) {
+function createResult(spot, conditions, logs, goldenTime = null) {
   const water = scoreWaterTemp(conditions.waterTemp, conditions.tempTrend);
   const tide = scoreTide(conditions.tide, spot);
   const sea = scoreSea(conditions, spot);
@@ -287,6 +292,7 @@ function createResult(spot, conditions, logs) {
   const past = scorePastLogs(logs, spot.spot_id);
   const safety = safetyGate(conditions, spot);
   const confidencePenalty = logs.some((log) => log.spot_id === spot.spot_id) ? 0 : 4;
+  const gtBonus = goldenTimeBonus(goldenTime);
 
   const raw =
     water * 0.2 +
@@ -296,12 +302,13 @@ function createResult(spot, conditions, logs) {
     spotScore * 0.15 +
     past * 0.15 -
     safety.penalty -
-    confidencePenalty;
+    confidencePenalty +
+    gtBonus;
 
   const score = safety.blocked ? 0 : clamp(raw);
   const judge = judgeScore(score, safety.blocked);
-  const parts = { water, tide, sea, moon, spot: spotScore, past, dangerPenalty: safety.penalty, confidencePenalty };
-  const reasonGroups = buildReasonGroups(parts, safety, spot, conditions);
+  const parts = { water, tide, sea, moon, spot: spotScore, past, dangerPenalty: safety.penalty, confidencePenalty, goldenTimeBonus: gtBonus };
+  const reasonGroups = buildReasonGroups(parts, safety, spot, conditions, goldenTime);
   const reasons = [
     `水温 ${water}/100、潮 ${tide}/100、風波 ${sea}/100、月 ${moon}/100。`,
     `地形適性 ${spotScore}/100、過去ログ補正 ${past}/100。`,
@@ -320,6 +327,7 @@ function createResult(spot, conditions, logs) {
     parts,
     reasons,
     reasonGroups,
+    goldenTime,
   };
 }
 
@@ -345,6 +353,75 @@ function createTimeline(baseScore, blocked) {
     score: blocked ? 0 : clamp(baseScore + delta),
     comment: blocked ? "安全NGのため見送り" : comment,
   }));
+}
+
+function bestGoldenTime(goldenTime) {
+  const windows = goldenTime?.golden_times || [];
+  return windows.length ? [...windows].sort((a, b) => Number(b.score || 0) - Number(a.score || 0))[0] : null;
+}
+
+function goldenTimeBonus(goldenTime) {
+  const best = bestGoldenTime(goldenTime);
+  if (!best) return 0;
+  return clamp((Number(best.score || 0) - 62) / 3, 0, 10);
+}
+
+function goldenTimeLabel(goldenTime) {
+  const best = bestGoldenTime(goldenTime);
+  return best ? `GT ${best.start}〜${best.end}` : "GT 推定中";
+}
+
+function createFallbackGoldenTime(spot, date, conditions) {
+  const nightSafety = Number(spot.night_safety || 3);
+  const difficulty = Number(spot.difficulty || 3);
+  const shibudai = Number(spot.shibudai_score || 3);
+  const seaPenalty = Math.max(0, Number(conditions.waveHeight || 0.8) - 1.0) * 18 + Math.max(0, Number(conditions.windSpeed || 4) - 7) * 3;
+  const moonBonus = conditions.moon === "dark" ? 10 : conditions.moon === "low" ? 7 : conditions.moon === "cloud" ? 5 : -4;
+  const safetyPenalty = nightSafety <= 1 ? 24 : nightSafety === 2 ? 10 : 0;
+  const baseScore = clamp(58 + shibudai * 5 + moonBonus + nightSafety * 2 - difficulty * 2 - seaPenalty - safetyPenalty);
+  const firstScore = clamp(baseScore + 8);
+  const secondScore = clamp(baseScore - 2);
+
+  return {
+    spot_id: spot.spot_id,
+    date,
+    source: "local_estimate",
+    notice: "GAS未取得時の簡易推定です。潮位・潮流は参考値として扱ってください。",
+    astronomy: {
+      sunset: "推定中",
+      sunrise: "推定中",
+      moon_age: "",
+      moonrise: "",
+      moonset: "",
+    },
+    golden_times: [
+      {
+        start: "20:30",
+        end: "22:00",
+        score: firstScore,
+        label: firstScore >= 80 ? "本命集中" : "第一候補",
+        reasons: ["日没後の暗い時間帯", "手入力の潮条件を優先", "波風の手入力条件を反映"],
+      },
+      {
+        start: "02:00",
+        end: "03:00",
+        score: secondScore,
+        label: secondScore >= 75 ? "継続価値あり" : "調査候補",
+        reasons: ["深夜の暗さを評価", "朝まずめ前の差し込み候補"],
+      },
+    ],
+    hourly: ["19:00", "20:00", "21:00", "22:00", "23:00", "00:00", "01:00", "02:00", "03:00", "04:00"].map((time, index) => ({
+      time,
+      golden_score: clamp(baseScore + (index >= 2 && index <= 3 ? 8 : index >= 7 && index <= 8 ? 4 : -6)),
+      tide_movement_score: conditions.tide === "slack" ? 42 : conditions.tide === "fast" ? 64 : 74,
+      tide_size_score: 60,
+      current_score: 60,
+      darkness_score: index >= 1 ? 82 : 55,
+      moon_score: conditions.moon === "bright" ? 48 : 78,
+      sun_score: index >= 1 && index <= 3 ? 78 : 55,
+      sea_safety_score: scoreSea(conditions, spot),
+    })),
+  };
 }
 
 function createDateOptions() {
@@ -406,6 +483,9 @@ const app = Vue.createApp({
       apiStatus: GAS_API_URL ? "GAS APIへ接続準備中" : "ローカルサンプルDBで表示中",
       forecastStatus: "手入力条件で計算中",
       autoLoading: false,
+      goldenLoading: false,
+      goldenStatus: "GTは推定表示中",
+      goldenTimesBySpot: {},
       selectedDate: today,
       dateOptions: createDateOptions(),
       baseArea: "田牛",
@@ -433,6 +513,18 @@ const app = Vue.createApp({
   },
   async mounted() {
     await this.loadFromGas();
+    this.refreshLocalGoldenTimes();
+  },
+  watch: {
+    selectedDate() {
+      this.refreshLocalGoldenTimes();
+    },
+    conditions: {
+      handler() {
+        this.refreshLocalGoldenTimes();
+      },
+      deep: true,
+    },
   },
   computed: {
     rankedSpots() {
@@ -455,6 +547,9 @@ const app = Vue.createApp({
     selectedResult() {
       return this.scoreSpot(this.selectedSpot);
     },
+    selectedGoldenTime() {
+      return this.goldenTimeData(this.selectedSpot);
+    },
     timeline() {
       return createTimeline(this.selectedResult.score, this.selectedResult.judge === "出撃不可");
     },
@@ -472,6 +567,7 @@ const app = Vue.createApp({
           }
         }
         if (Array.isArray(logs)) this.logs = logs;
+        this.refreshLocalGoldenTimes();
         this.apiStatus = "GAS APIからスプレッドシートDBを読み込み済み";
       } catch (error) {
         this.apiStatus = `GAS API読み込み失敗。ローカルサンプルで表示中: ${error.message}`;
@@ -498,6 +594,7 @@ const app = Vue.createApp({
         };
         this.forecastStatus = `${forecast.area || this.baseArea} / ${forecast.date || this.selectedDate} の海況を反映しました。潮位系は参考値です。`;
         this.spotSort = "score";
+        await this.fetchGoldenTimesForSpots();
       } catch (error) {
         this.forecastStatus = `海況取得に失敗しました: ${error.message}`;
       } finally {
@@ -505,7 +602,44 @@ const app = Vue.createApp({
       }
     },
     scoreSpot(spot) {
-      return createResult(spot, this.conditions, this.logs);
+      return createResult(spot, this.conditions, this.logs, this.goldenTimeData(spot));
+    },
+    refreshLocalGoldenTimes() {
+      const next = {};
+      this.spots.forEach((spot) => {
+        const cached = this.goldenTimesBySpot[spot.spot_id];
+        next[spot.spot_id] = cached?.source === "gas" && cached.date === this.selectedDate ? cached : createFallbackGoldenTime(spot, this.selectedDate, this.conditions);
+      });
+      this.goldenTimesBySpot = next;
+    },
+    async fetchGoldenTimesForSpots() {
+      if (!GAS_API_URL) {
+        this.goldenStatus = "GTはローカル推定です";
+        return;
+      }
+      this.goldenLoading = true;
+      this.goldenStatus = `${this.selectedDate} のゴールデンタイムを取得中`;
+      const targets = this.spots.filter((spot) => this.hasCoordinates(spot)).slice(0, 32);
+      const results = await Promise.allSettled(
+        targets.map((spot) => gasGet("goldenTime", { spot_id: spot.spot_id, date: this.selectedDate }))
+      );
+      const next = { ...this.goldenTimesBySpot };
+      let okCount = 0;
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled" && result.value?.golden_times) {
+          next[targets[index].spot_id] = { ...result.value, source: "gas" };
+          okCount++;
+        }
+      });
+      this.goldenTimesBySpot = next;
+      this.goldenStatus = okCount > 0 ? `${okCount}件のGTを反映済み（潮位・潮流は推定）` : "GT取得失敗。ローカル推定を表示中";
+      this.goldenLoading = false;
+    },
+    goldenTimeData(spot) {
+      return this.goldenTimesBySpot[spot?.spot_id] || createFallbackGoldenTime(spot, this.selectedDate, this.conditions);
+    },
+    goldenTimeLabel(spot) {
+      return goldenTimeLabel(this.goldenTimeData(spot));
     },
     judgeClass(judge) {
       return {

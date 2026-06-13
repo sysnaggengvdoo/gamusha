@@ -295,7 +295,7 @@ fieldset {
 
 .spot-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 130px 112px 54px;
+  grid-template-columns: minmax(0, 1fr) 130px 128px 112px 54px;
   align-items: center;
   gap: 12px;
   width: 100%;
@@ -323,6 +323,17 @@ fieldset {
 .time {
   color: #d9e4dc;
   font-size: 0.9rem;
+}
+
+.gt-pill {
+  min-height: 30px;
+  border: 1px solid rgba(255, 209, 102, 0.56);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: var(--yellow);
+  font-size: 0.84rem;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .pill {
@@ -446,6 +457,55 @@ fieldset {
   line-height: 1.8;
 }
 
+.gt-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.gt-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.gt-meta span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #101817;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.gt-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  padding: 13px;
+}
+
+.gt-card strong {
+  display: block;
+  color: var(--yellow);
+  font-size: 1.05rem;
+}
+
+.gt-card span {
+  display: block;
+  margin-top: 4px;
+  color: var(--mint);
+  font-size: 0.9rem;
+}
+
+.gt-card ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: #d8e1da;
+  line-height: 1.55;
+}
+
 .timeline {
   display: grid;
   gap: 12px;
@@ -559,6 +619,7 @@ fieldset {
   .field-grid,
   .field-grid.three,
   .spot-row,
+  .gt-summary,
   .time-row,
   .specs div {
     grid-template-columns: 1fr;
